@@ -97,16 +97,31 @@ st.markdown("""
         padding: 15px;
         border-radius: 10px;
         margin: 10px 0;
+        color: #2d2d2d;
+    }
+    
+    .chat-message strong {
+        color: #1a1a1a !important;
     }
     
     .user-message {
         background: #e3f2fd;
         margin-left: 20%;
+        color: #1565c0;
+    }
+    
+    .user-message strong {
+        color: #0d47a1 !important;
     }
     
     .bot-message {
         background: #f5f5f5;
         margin-right: 20%;
+        color: #2d2d2d;
+    }
+    
+    .bot-message strong {
+        color: #1a1a1a !important;
     }
     
     .feature-card {
