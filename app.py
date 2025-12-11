@@ -323,7 +323,7 @@ st.sidebar.markdown("# 🌿 Navigation")
 st.sidebar.markdown("---")
 app_mode = st.sidebar.selectbox(
     "Select Page", 
-    ["🏠 Home", "🔍 Plant Detection", "💬 AI Chat", "📚 My Plants", "⚙️ Settings"]
+    ["🏠 Home", "🔍 Plant Detection", "💬 AI Chat", "📚 My Plants"]
 )
 
 st.sidebar.markdown("---")
@@ -764,73 +764,3 @@ elif app_mode == "📚 My Plants":
         if st.button("🗑️ Clear History"):
             st.session_state.detection_history = []
             st.rerun()
-
-# ----------------------------------
-# Settings Page
-# ----------------------------------
-elif app_mode == "⚙️ Settings":
-    st.markdown("<h1>⚙️ Settings</h1>", unsafe_allow_html=True)
-    
-    st.markdown("### 🔑 API Configuration")
-    
-    plant_id_status = "✅ Configured" if PLANT_ID_API_KEY else "❌ Not Configured"
-    gemini_status = "✅ Configured" if GEMINI_API_KEY else "❌ Not Configured"
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="result-card">
-            <h3>Plant.id API</h3>
-            <p>Status: {plant_id_status}</p>
-            <p>Used for plant identification and disease detection</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="result-card">
-            <h3>Gemini API</h3>
-            <p>Status: {gemini_status}</p>
-            <p>Used for AI chat assistant</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    st.markdown("### 📝 Setup Instructions")
-    
-    st.code("""
-# Create .streamlit/secrets.toml file with:
-
-PLANT_ID_API_KEY = "your_plant_id_api_key_here"
-GEMINI_API_KEY = "your_gemini_api_key_here"
-    """, language="toml")
-    
-    st.markdown("""
-    **Get API Keys:**
-    - Plant.id: https://web.plant.id/ (Free: 100 requests/day)
-    - Gemini: https://makersuite.google.com/app/apikey (Free tier available)
-    """)
-    
-    st.markdown("---")
-    st.markdown("### 🎨 App Information")
-    st.info("""
-    **Plant Doctor AI v1.0**
-    
-    - Built with Streamlit
-    - Powered by Plant.id & Google Gemini
-    - Open source & free to use
-    
-    Features:
-    - Plant identification (10,000+ species)
-    - Disease detection (600+ diseases)  
-    - AI chat assistant
-    - Treatment recommendations
-    """)
-    
-    if st.button("🔄 Reset All Data"):
-        st.session_state.chat_history = []
-        st.session_state.plant_context = None
-        st.session_state.detection_history = []
-        st.success("✅ All data reset!")
-        st.rerun()
