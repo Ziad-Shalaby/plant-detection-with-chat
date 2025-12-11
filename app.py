@@ -284,7 +284,7 @@ def chat_with_gemini(user_message, context=None):
     try:
         # Configure Gemini with the correct model
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
         # Build context-aware prompt
         if context:
@@ -310,11 +310,16 @@ User question: {user_message}"""
     except Exception as e:
         # Try alternative model names
         try:
-            model = genai.GenerativeModel('models/gemini-pro')
+            model = genai.GenerativeModel('gemini-1.5-pro-latest')
             response = model.generate_content(full_prompt)
             return response.text
         except:
-            return f"Error communicating with Gemini: {str(e)}\n\nPlease verify your API key is correct and has access to Gemini models."
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(full_prompt)
+                return response.text
+            except:
+                return f"Error: Could not connect to Gemini. Please check your API key.\n\nTechnical details: {str(e)}"
 
 # ----------------------------------
 # Sidebar
