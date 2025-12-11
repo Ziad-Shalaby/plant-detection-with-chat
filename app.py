@@ -499,8 +499,20 @@ elif app_mode == "🔍 Plant Detection":
                         st.error(result.get("message"))
                     else:
                         data = result.get("data", {})
-                        is_healthy = data.get("is_healthy", {}).get("binary", False)
-                        is_plant = data.get("is_plant", {}).get("binary", True)
+                        
+                        # Safely get health status
+                        is_healthy_data = data.get("is_healthy", {})
+                        if isinstance(is_healthy_data, dict):
+                            is_healthy = is_healthy_data.get("binary", False)
+                        else:
+                            is_healthy = bool(is_healthy_data)
+                        
+                        # Safely get plant status
+                        is_plant_data = data.get("is_plant", {})
+                        if isinstance(is_plant_data, dict):
+                            is_plant = is_plant_data.get("binary", True)
+                        else:
+                            is_plant = bool(is_plant_data) if is_plant_data is not None else True
                         
                         if not is_plant:
                             st.warning("⚠️ This doesn't appear to be a plant image.")
