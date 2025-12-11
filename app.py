@@ -282,9 +282,15 @@ def chat_with_gemini(user_message, context=None):
         return "Gemini API key not configured. Please add GEMINI_API_KEY to .streamlit/secrets.toml"
     
     try:
-        # Configure Gemini with the correct model
+        # Configure Gemini
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        
+        # Try different model names that are currently supported
+        model_names = [
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-pro'
+        ]
         
         # Build context-aware prompt
         if context:
@@ -304,22 +310,22 @@ Provide helpful, accurate advice about plant care, diseases, and gardening. Be f
 
 User question: {user_message}"""
         
-        response = model.generate_content(full_prompt)
-        return response.text
-        
-    except Exception as e:
-        # Try alternative model names
-        try:
-            model = genai.GenerativeModel('gemini-1.5-pro-latest')
-            response = model.generate_content(full_prompt)
-            return response.text
-        except:
+        # Try each model until one works
+        last_error = None
+        for model_name in model_names:
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel(model_name)
                 response = model.generate_content(full_prompt)
                 return response.text
-            except:
-                return f"Error: Could not connect to Gemini. Please check your API key.\n\nTechnical details: {str(e)}"
+            except Exception as e:
+                last_error = str(e)
+                continue
+        
+        # If all models fail
+        return f"⚠️ Could not connect to Gemini API. All models failed.\n\nPlease ensure:\n1. Your API key is correct\n2. The Generative Language API is enabled\n3. Wait a few minutes if you just enabled it\n\nLast error: {last_error}"
+        
+    except Exception as e:
+        return f"Error: {str(e)}\n\nPlease verify your Gemini API key at: https://aistudio.google.com/app/apikey"
 
 # ----------------------------------
 # Sidebar
