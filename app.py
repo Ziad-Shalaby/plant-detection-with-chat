@@ -66,6 +66,15 @@ st.markdown("""
         border-radius: 15px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         margin: 15px 0;
+        color: #2d2d2d;
+    }
+    
+    .result-card h2, .result-card h3 {
+        color: #2d5016 !important;
+    }
+    
+    .result-card p, .result-card strong {
+        color: #333333 !important;
     }
     
     .healthy-card {
@@ -107,6 +116,15 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         text-align: center;
         transition: transform 0.3s;
+        color: #333333;
+    }
+    
+    .feature-card h3 {
+        color: #2d5016 !important;
+    }
+    
+    .feature-card p {
+        color: #555555 !important;
     }
     
     .feature-card:hover {
@@ -119,6 +137,11 @@ st.markdown("""
         border-radius: 12px;
         text-align: center;
         box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        color: #333333;
+    }
+    
+    .stat-box div:not(.stat-number) {
+        color: #555555 !important;
     }
     
     .stat-number {
