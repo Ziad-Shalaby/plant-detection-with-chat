@@ -183,10 +183,7 @@ if 'detection_history' not in st.session_state:
 PLANT_ID_API_KEY = st.secrets.get("PLANT_ID_API_KEY", "")
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# Configure Gemini
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+# Gemini will be configured in the chat function
 
 # ----------------------------------
 # Plant.id API Functions
@@ -285,6 +282,10 @@ def chat_with_gemini(user_message, context=None):
         return "Gemini API key not configured. Please add GEMINI_API_KEY to .streamlit/secrets.toml"
     
     try:
+        # Configure Gemini with the correct model
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-pro')
+        
         # Build context-aware prompt
         if context:
             system_prompt = f"""You are a helpful plant expert assistant. 
@@ -303,11 +304,17 @@ Provide helpful, accurate advice about plant care, diseases, and gardening. Be f
 
 User question: {user_message}"""
         
-        response = gemini_model.generate_content(full_prompt)
+        response = model.generate_content(full_prompt)
         return response.text
         
     except Exception as e:
-        return f"Error communicating with Gemini: {str(e)}"
+        # Try alternative model names
+        try:
+            model = genai.GenerativeModel('models/gemini-pro')
+            response = model.generate_content(full_prompt)
+            return response.text
+        except:
+            return f"Error communicating with Gemini: {str(e)}\n\nPlease verify your API key is correct and has access to Gemini models."
 
 # ----------------------------------
 # Sidebar
