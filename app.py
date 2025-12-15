@@ -276,25 +276,18 @@ def check_health(image_data):
 # ----------------------------------
 def chat_with_gemini(user_message, context=None):
     """
-    Chat with Gemini AI about plants
+    Chat with Gemini AI about plants using the REST API directly
     """
     if not GEMINI_API_KEY:
         return "Gemini API key not configured. Please add GEMINI_API_KEY to .streamlit/secrets.toml"
     
     try:
-        # Configure Gemini
-        genai.configure(api_key=GEMINI_API_KEY)
-        
-        # Try different model names that are currently supported
-        model_names = [
-            'gemini-2.0-flash-exp',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-pro-latest'
-        ]
+        # Use REST API directly instead of SDK
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         
         # Build context-aware prompt
         if context:
-            system_prompt = f"""You are a helpful plant expert assistant. 
+            system_instruction = f"""You are a helpful plant expert assistant. 
             
 Current plant context:
 - Plant: {context.get('plant_name', 'Unknown')}
@@ -304,29 +297,64 @@ Current plant context:
 
 Provide helpful, accurate advice about plant care, diseases, and gardening. Be friendly and conversational."""
             
-            full_prompt = f"{system_prompt}\n\nUser question: {user_message}"
+            full_prompt = f"{system_instruction}\n\nUser question: {user_message}"
         else:
             full_prompt = f"""You are a helpful plant expert assistant. Provide accurate advice about plant care, identification, diseases, and gardening. Be friendly and conversational.
 
 User question: {user_message}"""
         
-        # Try each model until one works
-        last_error = None
-        for model_name in model_names:
-            try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(full_prompt)
-                return response.text
-            except Exception as e:
-                last_error = str(e)
-                continue
+        # Prepare the request payload
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": full_prompt}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 1000,
+            }
+        }
         
-        # If all models fail
-        return f"⚠️ Could not connect to Gemini API. All models failed.\n\nPlease ensure:\n1. Your API key is correct\n2. The Generative Language API is enabled\n3. Wait a few minutes if you just enabled it\n\nLast error: {last_error}"
+        headers = {
+            "Content-Type": "application/json"
+        }
         
+        # Make the API request
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        # Check for errors
+        if response.status_code == 200:
+            result = response.json()
+            if 'candidates' in result and len(result['candidates']) > 0:
+                text = result['candidates'][0]['content']['parts'][0]['text']
+                return text
+            else:
+                return "⚠️ No response generated. Please try rephrasing your question."
+        
+        elif response.status_code == 400:
+            error_data = response.json()
+            return f"⚠️ API Error: {error_data.get('error', {}).get('message', 'Invalid request')}\n\nPlease check your API key or try again."
+        
+        elif response.status_code == 403:
+            return "⚠️ API key is invalid or doesn't have permission.\n\nSteps to fix:\n1. Go to https://aistudio.google.com/app/apikey\n2. Generate a new API key\n3. Update your .streamlit/secrets.toml file\n4. Restart the app"
+        
+        elif response.status_code == 404:
+            return "⚠️ Model not found. The Gemini API might be unavailable in your region.\n\nTry:\n1. Check if you can access https://aistudio.google.com\n2. Verify your API key is from Google AI Studio (not Google Cloud)\n3. Check if Gemini API is available in your country"
+        
+        else:
+            return f"⚠️ API Error (Status {response.status_code}): {response.text}\n\nPlease try again or contact support."
+        
+    except requests.exceptions.Timeout:
+        return "⚠️ Request timed out. Please check your internet connection and try again."
+    
+    except requests.exceptions.ConnectionError:
+        return "⚠️ Cannot connect to Gemini API. Please check your internet connection."
+    
     except Exception as e:
-        return f"Error: {str(e)}\n\nPlease verify your Gemini API key at: https://aistudio.google.com/app/apikey"
-
+        return f"⚠️ Unexpected error: {str(e)}\n\nPlease verify:\n1. Your API key at https://aistudio.google.com/app/apikey\n2. Your internet connection\n3. Try restarting the app"
 # ----------------------------------
 # Sidebar
 # ----------------------------------
@@ -775,4 +803,5 @@ elif app_mode == "📚 My Plants":
         if st.button("🗑️ Clear History"):
             st.session_state.detection_history = []
             st.rerun()
+
 
