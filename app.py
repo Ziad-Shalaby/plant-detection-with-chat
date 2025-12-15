@@ -287,9 +287,9 @@ def chat_with_gemini(user_message, context=None):
         
         # Try different model names that are currently supported
         model_names = [
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-pro'
+            'gemini-2.0-flash-exp',
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-pro-latest'
         ]
         
         # Build context-aware prompt
@@ -775,3 +775,4 @@ elif app_mode == "📚 My Plants":
         if st.button("🗑️ Clear History"):
             st.session_state.detection_history = []
             st.rerun()
+
