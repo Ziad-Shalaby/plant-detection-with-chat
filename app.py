@@ -222,12 +222,12 @@ def chat_with_huggingface(user_message, context=None):
         return "Hugging Face API key not configured. Please add HUGGINGFACE_API_KEY to .streamlit/secrets.toml"
     
     try:
-        # Try multiple models in order of preference
+        # Try multiple models in order of preference (using serverless inference)
         models = [
-            "mistralai/Mixtral-8x7B-Instruct-v0.1",  # Very powerful
-            "meta-llama/Meta-Llama-3-8B-Instruct",   # Good alternative
-            "mistralai/Mistral-7B-Instruct-v0.2",    # Reliable fallback
-            "HuggingFaceH4/zephyr-7b-beta"           # Good general model
+            "mistralai/Mistral-7B-Instruct-v0.2",    # Fast and reliable
+            "HuggingFaceH4/zephyr-7b-beta",          # Good general model
+            "microsoft/DialoGPT-large",               # Conversation model
+            "google/flan-t5-large"                    # Versatile model
         ]
         
         # Build context-aware prompt
@@ -252,21 +252,30 @@ Answer:"""
         last_error = None
         for model in models:
             try:
+                # Using Hugging Face Serverless Inference API
                 API_URL = f"https://api-inference.huggingface.co/models/{model}"
-                headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+                headers = {
+                    "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
+                    "Content-Type": "application/json",
+                    "x-wait-for-model": "true"  # Wait for model to load
+                }
                 
                 payload = {
                     "inputs": full_prompt,
                     "parameters": {
-                        "max_new_tokens": 500,
+                        "max_new_tokens": 512,
                         "temperature": 0.7,
                         "top_p": 0.95,
-                        "do_sample": True,
+                        "repetition_penalty": 1.1,
                         "return_full_text": False
+                    },
+                    "options": {
+                        "wait_for_model": True,
+                        "use_cache": False
                     }
                 }
                 
-                response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+                response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -582,7 +591,7 @@ elif app_mode == "💬 AI Chat":
         })
         
         # Get AI response
-        with st.spinner("🤔 Thinking... (first request may take 20-60 seconds)"):
+        with st.spinner("🤔 Thinking... (first request may take 30-60 seconds)"):
             response = chat_with_huggingface(user_input, st.session_state.plant_context)
         
         # Add bot response
