@@ -167,8 +167,75 @@ PLANT_ID_API_KEY = st.secrets.get("PLANT_ID_API_KEY", "")
 HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY", "")
 
 # ----------------------------------
-# Plant.id API Functions
+# Plant Detection Functions
 # ----------------------------------
+def detect_plant_with_huggingface(image_data):
+    """
+    Detect plant using Hugging Face Plant Classification Models
+    """
+    if not HUGGINGFACE_API_KEY:
+        return {
+            "error": True,
+            "message": "Hugging Face API key not configured"
+        }
+    
+    try:
+        # Convert image to bytes
+        buffered = io.BytesIO()
+        image_data.save(buffered, format="JPEG")
+        image_bytes = buffered.getvalue()
+        
+        # Try specialized plant classification models
+        models = [
+            "linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification",  # Plant disease + identification
+            "nateraw/plant-image-classifier",                                   # General plant classifier
+            "google/vit-base-patch16-224",                                      # Vision transformer (backup)
+        ]
+        
+        for model_name in models:
+            try:
+                API_URL = f"https://api-inference.huggingface.co/models/{model_name}"
+                headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+                
+                response = requests.post(
+                    API_URL,
+                    headers=headers,
+                    data=image_bytes,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    # Parse classification results
+                    if isinstance(result, list) and len(result) > 0:
+                        # Get top predictions
+                        predictions = sorted(result, key=lambda x: x.get('score', 0), reverse=True)[:3]
+                        
+                        return {
+                            "error": False,
+                            "data": {
+                                "predictions": predictions,
+                                "model": model_name,
+                                "top_prediction": predictions[0] if predictions else None
+                            }
+                        }
+                elif response.status_code == 503:
+                    # Model loading, try next
+                    continue
+                    
+            except Exception as e:
+                continue
+        
+        return {
+            "error": True,
+            "message": "Could not detect plant. Models may be loading (can take 20-60 seconds). Please try again."
+        }
+        
+    except Exception as e:
+        return {"error": True, "message": f"Detection failed: {str(e)}"}
+
+
 def identify_plant(image_data):
     """
     Identify plant using Plant.id API
@@ -431,21 +498,30 @@ if app_mode == "🏠 Home":
     # API Setup Warning
     if not PLANT_ID_API_KEY or not HUGGINGFACE_API_KEY:
         st.warning("""
-        ⚠️ **API Keys Required**
+        ⚠️ **API Keys Configuration**
         
-        To use this app, you need to configure API keys:
-        1. Get Plant.id API key from https://web.plant.id/
-        2. Get Hugging Face API key from https://huggingface.co/settings/tokens
-        3. Create `.streamlit/secrets.toml` file with:
+        This app supports two detection methods:
+        
+        **Option 1: Plant.id (Most Accurate)**
+        - Get API key from https://web.plant.id/
+        - 10,000+ species database
+        - High accuracy identification
+        
+        **Option 2: Hugging Face (Completely Free)**
+        - Get API key from https://huggingface.co/settings/tokens
+        - Uses AI vision models
+        - Works great in Egypt! 🇪🇬
+        
+        Create `.streamlit/secrets.toml` file with:
         ```
-        PLANT_ID_API_KEY = "your_plant_id_key"
-        HUGGINGFACE_API_KEY = "your_huggingface_key"
+        PLANT_ID_API_KEY = "your_plant_id_key"  # Optional
+        HUGGINGFACE_API_KEY = "your_huggingface_key"  # Required for chat
         ```
         
-        **Both services have free tiers available!**
-        
-        Hugging Face works great in Egypt! 🇪🇬
+        **You can use just Hugging Face for everything!**
         """)
+    else:
+        st.success("✅ API keys configured! You're ready to identify plants.")
 
 # ----------------------------------
 # Plant Detection Page
@@ -453,8 +529,15 @@ if app_mode == "🏠 Home":
 elif app_mode == "🔍 Plant Detection":
     st.markdown("<h1>🔍 Plant Identification</h1>", unsafe_allow_html=True)
     
-    if not PLANT_ID_API_KEY:
-        st.error("⚠️ Plant.id API key not configured. Please add it to .streamlit/secrets.toml")
+    # Detection method selector
+    col_method1, col_method2 = st.columns(2)
+    with col_method1:
+        use_plantid = st.checkbox("Use Plant.id (Accurate)", value=bool(PLANT_ID_API_KEY), disabled=not PLANT_ID_API_KEY)
+    with col_method2:
+        use_hf = st.checkbox("Use Hugging Face (Free)", value=True)
+    
+    if not PLANT_ID_API_KEY and not HUGGINGFACE_API_KEY:
+        st.error("⚠️ At least one API key is required. Please add PLANT_ID_API_KEY or HUGGINGFACE_API_KEY to .streamlit/secrets.toml")
         st.stop()
     
     col1, col2 = st.columns([1, 1])
@@ -474,54 +557,120 @@ elif app_mode == "🔍 Plant Detection":
         
         if uploaded_file:
             if identify_btn:
-                with st.spinner("🔍 Identifying plant..."):
-                    result = identify_plant(image)
-                    
-                    if result.get("error"):
-                        st.error(result.get("message"))
-                    else:
-                        data = result.get("data", {})
-                        suggestions = data.get("suggestions", [])
+                results_found = False
+                
+                # Try Hugging Face first if selected
+                if use_hf and HUGGINGFACE_API_KEY:
+                    with st.spinner("🤖 Analyzing with Hugging Face Plant Classifier..."):
+                        hf_result = detect_plant_with_huggingface(image)
                         
-                        if suggestions:
-                            top_match = suggestions[0]
-                            plant_name = top_match.get("plant_name", "Unknown")
-                            probability = top_match.get("probability", 0) * 100
+                        if not hf_result.get("error"):
+                            data = hf_result.get("data", {})
+                            predictions = data.get("predictions", [])
+                            top_pred = data.get("top_prediction", {})
                             
-                            plant_details = top_match.get("plant_details", {})
-                            common_names = plant_details.get("common_names", [])
-                            taxonomy = plant_details.get("taxonomy", {})
-                            scientific_name = taxonomy.get("genus", "") + " " + taxonomy.get("species", "")
-                            
-                            # Display results
-                            st.markdown(f"""
-                            <div class="result-card">
-                                <h2>🌿 {plant_name}</h2>
-                                <p><strong>Scientific Name:</strong> {scientific_name}</p>
-                                <p><strong>Common Names:</strong> {', '.join(common_names[:3]) if common_names else 'N/A'}</p>
-                                <p><strong>Confidence:</strong> {probability:.1f}%</p>
-                                <p><strong>Family:</strong> {taxonomy.get('family', 'N/A')}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            # Save to context
-                            st.session_state.plant_context = {
-                                'plant_name': plant_name,
-                                'scientific_name': scientific_name,
-                                'common_names': common_names,
-                                'confidence': probability
-                            }
-                            
-                            # Save to history
-                            st.session_state.detection_history.append({
-                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                'plant_name': plant_name,
-                                'type': 'identification'
-                            })
-                            
-                            st.success("✅ Plant identified! You can now chat with AI about this plant.")
+                            if top_pred:
+                                plant_label = top_pred.get('label', 'Unknown')
+                                confidence = top_pred.get('score', 0) * 100
+                                
+                                # Clean up label (remove underscores, capitalize)
+                                plant_name = plant_label.replace('_', ' ').title()
+                                
+                                st.markdown(f"""
+                                <div class="result-card">
+                                    <h2>🤖 AI Plant Classification</h2>
+                                    <h3>🌿 {plant_name}</h3>
+                                    <p><strong>Confidence:</strong> {confidence:.1f}%</p>
+                                    <p><strong>Model:</strong> {data.get('model', 'Unknown').split('/')[-1]}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                                # Show top 3 predictions
+                                if len(predictions) > 1:
+                                    st.markdown("### 📊 Top Predictions")
+                                    for i, pred in enumerate(predictions[:3], 1):
+                                        label = pred.get('label', 'Unknown').replace('_', ' ').title()
+                                        score = pred.get('score', 0) * 100
+                                        st.write(f"{i}. **{label}** - {score:.1f}%")
+                                
+                                # Get more info using AI chat
+                                if HUGGINGFACE_API_KEY:
+                                    with st.spinner("🤔 Getting detailed plant information..."):
+                                        plant_query = f"Tell me about {plant_name}. Include: scientific name, family, common care tips, and interesting facts. Keep it concise (3-4 sentences)."
+                                        plant_info = chat_with_huggingface(plant_query, None)
+                                        
+                                        st.markdown(f"""
+                                        <div class="result-card">
+                                            <h3>📚 Plant Information</h3>
+                                            <p>{plant_info}</p>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                
+                                # Save to context
+                                st.session_state.plant_context = {
+                                    'plant_name': plant_name,
+                                    'scientific_name': 'Detected by AI Model',
+                                    'common_names': [plant_name],
+                                    'confidence': confidence
+                                }
+                                
+                                results_found = True
                         else:
-                            st.warning("No plant identified. Please try a clearer image.")
+                            st.warning(f"Hugging Face: {hf_result.get('message')}")
+                
+                # Try Plant.id if selected and available
+                if use_plantid and PLANT_ID_API_KEY:
+                    with st.spinner("🔍 Identifying with Plant.id..."):
+                        result = identify_plant(image)
+                        
+                        if not result.get("error"):
+                            data = result.get("data", {})
+                            suggestions = data.get("suggestions", [])
+                            
+                            if suggestions:
+                                top_match = suggestions[0]
+                                plant_name = top_match.get("plant_name", "Unknown")
+                                probability = top_match.get("probability", 0) * 100
+                                
+                                plant_details = top_match.get("plant_details", {})
+                                common_names = plant_details.get("common_names", [])
+                                taxonomy = plant_details.get("taxonomy", {})
+                                scientific_name = taxonomy.get("genus", "") + " " + taxonomy.get("species", "")
+                                
+                                # Display results
+                                st.markdown(f"""
+                                <div class="result-card">
+                                    <h2>🌿 {plant_name}</h2>
+                                    <p><strong>Scientific Name:</strong> {scientific_name}</p>
+                                    <p><strong>Common Names:</strong> {', '.join(common_names[:3]) if common_names else 'N/A'}</p>
+                                    <p><strong>Confidence:</strong> {probability:.1f}%</p>
+                                    <p><strong>Family:</strong> {taxonomy.get('family', 'N/A')}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                                # Save to context
+                                st.session_state.plant_context = {
+                                    'plant_name': plant_name,
+                                    'scientific_name': scientific_name,
+                                    'common_names': common_names,
+                                    'confidence': probability
+                                }
+                                
+                                results_found = True
+                        else:
+                            st.warning(f"Plant.id error: {result.get('message')}")
+                
+                if results_found:
+                    # Save to history
+                    st.session_state.detection_history.append({
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        'plant_name': st.session_state.plant_context.get('plant_name', 'Unknown'),
+                        'type': 'identification'
+                    })
+                    
+                    st.success("✅ Plant identified! You can now chat with AI about this plant.")
+                else:
+                    st.warning("No plant identified. Please try a clearer image or enable detection methods.")
         else:
             st.info("👆 Upload an image to get started")
 
