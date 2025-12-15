@@ -222,12 +222,12 @@ def chat_with_huggingface(user_message, context=None):
         return "Hugging Face API key not configured. Please add HUGGINGFACE_API_KEY to .streamlit/secrets.toml"
     
     try:
-        # Try multiple models in order of preference (using serverless inference)
+        # Try multiple models in order of preference (using router API)
         models = [
-            "mistralai/Mistral-7B-Instruct-v0.2",    # Fast and reliable
-            "HuggingFaceH4/zephyr-7b-beta",          # Good general model
-            "microsoft/DialoGPT-large",               # Conversation model
-            "google/flan-t5-large"                    # Versatile model
+            "Qwen/Qwen2.5-72B-Instruct",              # Very powerful and fast
+            "meta-llama/Llama-3.2-3B-Instruct",       # Efficient
+            "mistralai/Mistral-7B-Instruct-v0.3",     # Reliable
+            "microsoft/Phi-3.5-mini-instruct"         # Fast backup
         ]
         
         # Build context-aware prompt
@@ -252,27 +252,25 @@ Answer:"""
         last_error = None
         for model in models:
             try:
-                # Using Hugging Face Serverless Inference API
-                API_URL = f"https://api-inference.huggingface.co/models/{model}"
+                # Using Hugging Face Router API (new endpoint)
+                API_URL = f"https://router.huggingface.co/v1/chat/completions"
                 headers = {
                     "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
-                    "Content-Type": "application/json",
-                    "x-wait-for-model": "true"  # Wait for model to load
+                    "Content-Type": "application/json"
                 }
                 
                 payload = {
-                    "inputs": full_prompt,
-                    "parameters": {
-                        "max_new_tokens": 512,
-                        "temperature": 0.7,
-                        "top_p": 0.95,
-                        "repetition_penalty": 1.1,
-                        "return_full_text": False
-                    },
-                    "options": {
-                        "wait_for_model": True,
-                        "use_cache": False
-                    }
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": full_prompt
+                        }
+                    ],
+                    "max_tokens": 512,
+                    "temperature": 0.7,
+                    "top_p": 0.95,
+                    "stream": False
                 }
                 
                 response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
@@ -280,11 +278,9 @@ Answer:"""
                 if response.status_code == 200:
                     result = response.json()
                     
-                    # Handle different response formats
-                    if isinstance(result, list) and len(result) > 0:
-                        generated_text = result[0].get('generated_text', '')
-                    elif isinstance(result, dict):
-                        generated_text = result.get('generated_text', '')
+                    # Handle chat completion format
+                    if "choices" in result and len(result["choices"]) > 0:
+                        generated_text = result["choices"][0]["message"]["content"]
                     else:
                         generated_text = str(result)
                     
