@@ -182,9 +182,6 @@ if 'detection_history' not in st.session_state:
 PLANT_ID_API_KEY = st.secrets.get("PLANT_ID_API_KEY", "")
 HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY", "")
 
-# AI Provider - Default to Hugging Face (FREE)
-AI_PROVIDER = st.secrets.get("AI_PROVIDER", "huggingface")
-
 # ----------------------------------
 # Plant.id API Functions
 # ----------------------------------
@@ -272,37 +269,49 @@ def check_health(image_data):
         return {"error": True, "message": f"Request failed: {str(e)}"}
 
 # ----------------------------------
-# Hugging Face Chat Function (100% FREE)
+# Hugging Face Chat Functions
 # ----------------------------------
 def chat_with_huggingface(user_message, context=None):
     """
-    Chat using Hugging Face Free Inference API (100% FREE - No credit card needed!)
-    Uses Mistral-7B-Instruct model
+    Chat with Hugging Face AI about plants
     """
     if not HUGGINGFACE_API_KEY:
-        return "⚠️ Hugging Face API key not configured. Please add HUGGINGFACE_API_KEY to .streamlit/secrets.toml"
+        return "Hugging Face API key not configured. Please add HUGGINGFACE_API_KEY to .streamlit/secrets.toml"
     
     try:
-        # Using Mistral-7B-Instruct (free and powerful)
-        url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+        # Use a powerful open-source model
+        # Options: "mistralai/Mistral-7B-Instruct-v0.2", "meta-llama/Llama-2-7b-chat-hf", "HuggingFaceH4/zephyr-7b-beta"
+        API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+        
+        headers = {
+            "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
+            "Content-Type": "application/json"
+        }
         
         # Build context-aware prompt
-        system_content = "You are a helpful plant expert assistant. Provide accurate advice about plant care, identification, diseases, and gardening. Be friendly and conversational."
-        
         if context:
-            system_content += f"""
+            system_prompt = f"""You are a helpful plant expert assistant. 
 
 Current plant context:
 - Plant: {context.get('plant_name', 'Unknown')}
 - Scientific Name: {context.get('scientific_name', 'N/A')}
 - Health Status: {context.get('health_status', 'N/A')}
-- Disease: {context.get('disease', 'None detected')}"""
-        
-        # Format prompt for Mistral
-        full_prompt = f"<s>[INST] {system_content}\n\nUser question: {user_message} [/INST]"
+- Disease: {context.get('disease', 'None detected')}
+
+Provide helpful, accurate advice about plant care, diseases, and gardening. Be friendly and conversational.
+
+User question: {user_message}
+
+Answer:"""
+        else:
+            system_prompt = f"""You are a helpful plant expert assistant. Provide accurate advice about plant care, identification, diseases, and gardening. Be friendly and conversational.
+
+User question: {user_message}
+
+Answer:"""
         
         payload = {
-            "inputs": full_prompt,
+            "inputs": system_prompt,
             "parameters": {
                 "max_new_tokens": 500,
                 "temperature": 0.7,
@@ -312,39 +321,38 @@ Current plant context:
             }
         }
         
-        headers = {
-            "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        response = requests.post(API_URL, headers=headers, json=payload)
         
         if response.status_code == 200:
             result = response.json()
+            
+            # Handle different response formats
             if isinstance(result, list) and len(result) > 0:
                 generated_text = result[0].get('generated_text', '')
-                # Extract only the response part (after [/INST])
-                if '[/INST]' in generated_text:
-                    answer = generated_text.split('[/INST]')[-1].strip()
-                    return answer if answer else generated_text
-                return generated_text.strip()
-            return "⚠️ No response generated. Please try again."
-        
+            elif isinstance(result, dict):
+                generated_text = result.get('generated_text', '') or result.get('output', '')
+            else:
+                generated_text = str(result)
+            
+            # Clean up the response
+            generated_text = generated_text.strip()
+            
+            if not generated_text:
+                return "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
+            
+            return generated_text
+            
         elif response.status_code == 503:
-            return "⚠️ Model is loading (first time use). Please wait 20-30 seconds and try again."
-        
+            return "⏳ The AI model is loading. This usually takes 20-30 seconds. Please try again in a moment."
         elif response.status_code == 401:
-            return "⚠️ Invalid Hugging Face API key. Please check your token at https://huggingface.co/settings/tokens"
-        
+            return "⚠️ Invalid Hugging Face API key. Please check your configuration."
         else:
-            return f"⚠️ API Error: {response.status_code} - {response.text}"
-    
-    except requests.exceptions.Timeout:
-        return "⚠️ Request timed out. The model might be loading. Please wait and try again."
-    
+            return f"⚠️ API Error ({response.status_code}): {response.text[:200]}"
+        
+    except requests.exceptions.RequestException as e:
+        return f"⚠️ Network error: {str(e)}"
     except Exception as e:
         return f"⚠️ Error: {str(e)}"
-
 
 # ----------------------------------
 # Sidebar
@@ -355,11 +363,6 @@ app_mode = st.sidebar.selectbox(
     "Select Page", 
     ["🏠 Home", "🔍 Plant Detection", "💬 AI Chat", "📚 My Plants"]
 )
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🤖 AI Provider")
-st.sidebar.success("🟠 **Hugging Face** (100% FREE)")
-st.sidebar.caption("Powered by Mistral-7B")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Quick Stats")
@@ -382,7 +385,7 @@ st.sidebar.info("""
 # ----------------------------------
 if app_mode == "🏠 Home":
     st.markdown("<h1>🌿 Plant Doctor AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>AI-Powered Plant Identification & Health Diagnosis - 100% FREE</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>AI-Powered Plant Identification & Health Diagnosis</p>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -458,8 +461,8 @@ if app_mode == "🏠 Home":
     with col4:
         st.markdown("""
         <div class="stat-box">
-            <div class="stat-number">💯</div>
-            <div>FREE</div>
+            <div class="stat-number">⚡</div>
+            <div>Instant</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -471,31 +474,24 @@ if app_mode == "🏠 Home":
     1. Go to **Plant Detection** page
     2. Upload a clear photo of your plant
     3. Get instant identification and health assessment
-    4. Chat with AI for personalized advice (100% FREE)
+    4. Chat with AI for personalized advice
     """)
     
     # API Setup Warning
     if not PLANT_ID_API_KEY or not HUGGINGFACE_API_KEY:
         st.warning("""
-        ⚠️ **FREE API Keys Required**
+        ⚠️ **API Keys Required**
         
-        To use this app, you need to configure FREE API keys in `.streamlit/secrets.toml`:
-        
-        **1. Plant.id (100 free requests/month):**
-        - Get FREE API key from https://web.plant.id/
-        
-        **2. Hugging Face (100% FREE - Unlimited!):**
-        - Sign up at https://huggingface.co/join (NO credit card!)
-        - Get token at https://huggingface.co/settings/tokens
-        
-        **Example secrets.toml:**
-        ```toml
+        To use this app, you need to configure API keys:
+        1. Get Plant.id API key from https://web.plant.id/
+        2. Get Hugging Face API key from https://huggingface.co/settings/tokens (FREE!)
+        3. Create `.streamlit/secrets.toml` file with:
+        ```
         PLANT_ID_API_KEY = "your_plant_id_key"
-        HUGGINGFACE_API_KEY = "hf_your_token"
-        AI_PROVIDER = "huggingface"
+        HUGGINGFACE_API_KEY = "your_huggingface_key"
         ```
         
-        **Both services are 100% FREE!** ✨
+        **Both services have free tiers available!**
         """)
 
 # ----------------------------------
@@ -539,255 +535,4 @@ elif app_mode == "🔍 Plant Detection":
                         suggestions = data.get("suggestions", [])
                         
                         if suggestions:
-                            top_match = suggestions[0]
-                            plant_name = top_match.get("plant_name", "Unknown")
-                            probability = top_match.get("probability", 0) * 100
-                            
-                            plant_details = top_match.get("plant_details", {})
-                            common_names = plant_details.get("common_names", [])
-                            taxonomy = plant_details.get("taxonomy", {})
-                            scientific_name = taxonomy.get("genus", "") + " " + taxonomy.get("species", "")
-                            
-                            # Display results
-                            st.markdown(f"""
-                            <div class="result-card">
-                                <h2>🌿 {plant_name}</h2>
-                                <p><strong>Scientific Name:</strong> {scientific_name}</p>
-                                <p><strong>Common Names:</strong> {', '.join(common_names[:3]) if common_names else 'N/A'}</p>
-                                <p><strong>Confidence:</strong> {probability:.1f}%</p>
-                                <p><strong>Family:</strong> {taxonomy.get('family', 'N/A')}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            # Save to context
-                            st.session_state.plant_context = {
-                                'plant_name': plant_name,
-                                'scientific_name': scientific_name,
-                                'common_names': common_names,
-                                'confidence': probability
-                            }
-                            
-                            # Save to history
-                            st.session_state.detection_history.append({
-                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                'plant_name': plant_name,
-                                'type': 'identification'
-                            })
-                            
-                            st.success("✅ Plant identified! You can now chat with AI about this plant.")
-                        else:
-                            st.warning("No plant identified. Please try a clearer image.")
-            
-            if health_btn:
-                with st.spinner("🏥 Analyzing plant health..."):
-                    result = check_health(image)
-                    
-                    if result.get("error"):
-                        st.error(result.get("message"))
-                    else:
-                        data = result.get("data", {})
-                        
-                        # Safely get health status
-                        is_healthy_data = data.get("is_healthy", {})
-                        if isinstance(is_healthy_data, dict):
-                            is_healthy = is_healthy_data.get("binary", False)
-                        else:
-                            is_healthy = bool(is_healthy_data)
-                        
-                        # Safely get plant status
-                        is_plant_data = data.get("is_plant", {})
-                        if isinstance(is_plant_data, dict):
-                            is_plant = is_plant_data.get("binary", True)
-                        else:
-                            is_plant = bool(is_plant_data) if is_plant_data is not None else True
-                        
-                        if not is_plant:
-                            st.warning("⚠️ This doesn't appear to be a plant image.")
-                        elif is_healthy:
-                            st.markdown("""
-                            <div class="healthy-card">
-                                <h2>✅ Healthy Plant!</h2>
-                                <p>Your plant appears to be in good health with no diseases detected.</p>
-                                <p><strong>Health Score:</strong> Excellent</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            st.balloons()
-                            
-                            # Update context
-                            if st.session_state.plant_context:
-                                st.session_state.plant_context['health_status'] = 'Healthy'
-                                st.session_state.plant_context['disease'] = 'None'
-                        else:
-                            suggestions = data.get("suggestions", [])
-                            if suggestions:
-                                disease = suggestions[0]
-                                disease_name = disease.get("name", "Unknown Disease")
-                                probability = disease.get("probability", 0) * 100
-                                
-                                disease_details = disease.get("disease_details", {})
-                                description = disease_details.get("description", "No description available")
-                                treatment = disease_details.get("treatment", {})
-                                
-                                st.markdown(f"""
-                                <div class="disease-card">
-                                    <h2>⚠️ Disease Detected</h2>
-                                    <h3>{disease_name}</h3>
-                                    <p><strong>Confidence:</strong> {probability:.1f}%</p>
-                                    <p><strong>Description:</strong> {description[:200]}...</p>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                
-                                if treatment:
-                                    st.markdown("### 💊 Treatment Recommendations")
-                                    biological = treatment.get("biological", [])
-                                    chemical = treatment.get("chemical", [])
-                                    prevention = treatment.get("prevention", [])
-                                    
-                                    if biological:
-                                        st.write("**Biological Treatment:**")
-                                        for treat in biological[:3]:
-                                            st.write(f"- {treat}")
-                                    
-                                    if chemical:
-                                        st.write("**Chemical Treatment:**")
-                                        for treat in chemical[:3]:
-                                            st.write(f"- {treat}")
-                                    
-                                    if prevention:
-                                        st.write("**Prevention:**")
-                                        for prev in prevention[:3]:
-                                            st.write(f"- {prev}")
-                                
-                                # Update context
-                                if st.session_state.plant_context:
-                                    st.session_state.plant_context['health_status'] = 'Diseased'
-                                    st.session_state.plant_context['disease'] = disease_name
-                                else:
-                                    st.session_state.plant_context = {
-                                        'plant_name': 'Unknown',
-                                        'health_status': 'Diseased',
-                                        'disease': disease_name
-                                    }
-                                
-                                st.session_state.detection_history.append({
-                                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                    'plant_name': st.session_state.plant_context.get('plant_name', 'Unknown'),
-                                    'type': 'disease',
-                                    'disease': disease_name
-                                })
-        else:
-            st.info("👆 Upload an image to get started")
-
-# ----------------------------------
-# AI Chat Page (FREE with Hugging Face)
-# ----------------------------------
-elif app_mode == "💬 AI Chat":
-    st.markdown("<h1>💬 Chat with Plant Expert AI (100% FREE)</h1>", unsafe_allow_html=True)
-    
-    # Check if Hugging Face API key is configured
-    if not HUGGINGFACE_API_KEY:
-        st.error("""
-        ⚠️ **Hugging Face API Key Not Configured**
-        
-        Get your FREE API key (no credit card needed!):
-        
-        **Steps:**
-        1. Go to https://huggingface.co/join
-        2. Create free account
-        3. Go to Settings → Access Tokens
-        4. Create new token (read access)
-        5. Add to `.streamlit/secrets.toml`:
-        
-        ```toml
-        HUGGINGFACE_API_KEY = "hf_your_token_here"
-        AI_PROVIDER = "huggingface"
-        ```
-        
-        **Completely FREE - No credit card required!** ✨
-        """)
-        st.stop()
-    
-    # Show current AI provider
-    st.info("🟠 Using: **HUGGING FACE** (100% FREE) - Powered by Mistral-7B")
-    
-    # Display context if available
-    if st.session_state.plant_context:
-        with st.expander("📌 Current Plant Context", expanded=True):
-            context = st.session_state.plant_context
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**Plant:** {context.get('plant_name', 'Unknown')}")
-                st.write(f"**Scientific Name:** {context.get('scientific_name', 'N/A')}")
-            with col2:
-                st.write(f"**Health Status:** {context.get('health_status', 'N/A')}")
-                st.write(f"**Disease:** {context.get('disease', 'None')}")
-    else:
-        st.info("💡 Identify a plant first to get context-aware advice, or ask general questions!")
-    
-    st.markdown("---")
-    
-    # Chat History
-    chat_container = st.container()
-    with chat_container:
-        for message in st.session_state.chat_history:
-            if message['role'] == 'user':
-                st.markdown(f"""
-                <div class="chat-message user-message">
-                    <strong>You:</strong> {message['content']}
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class="chat-message bot-message">
-                    <strong>🤖 Plant Expert:</strong> {message['content']}
-                </div>
-                """, unsafe_allow_html=True)
-    
-    # Chat Input
-    st.markdown("---")
-    col1, col2 = st.columns([5, 1])
-    
-    with col1:
-        user_input = st.text_input("Ask me anything about plants...", key="chat_input", placeholder="e.g., How do I treat fungal diseases?")
-    
-    with col2:
-        send_btn = st.button("Send 📨", use_container_width=True)
-    
-    if send_btn and user_input:
-        # Add user message
-        st.session_state.chat_history.append({
-            'role': 'user',
-            'content': user_input
-        })
-        
-        # Get AI response
-        with st.spinner("🤔 Thinking... (First request may take 20-30 seconds to load model)"):
-            response = chat_with_huggingface(user_input, st.session_state.plant_context)
-        
-        # Add bot response
-        st.session_state.chat_history.append({
-            'role': 'assistant',
-            'content': response
-        })
-        
-        st.rerun()
-    
-    # Quick Questions
-    if len(st.session_state.chat_history) == 0:
-        st.markdown("### 💡 Quick Questions")
-        quick_questions = [
-            "What are common tomato diseases?",
-            "How often should I water succulents?",
-            "What causes yellow leaves?",
-            "Best fertilizer for roses?"
-        ]
-        
-        cols = st.columns(2)
-        for i, question in enumerate(quick_questions):
-            with cols[i % 2]:
-                if st.button(question, key=f"quick_{i}"):
-                    st.session_state.chat_history.append({
-                        'role': 'user',
-                        'content': question
-                    })
-                    with st.spinner("🤔 Thinking..."):
+                            top_ma
