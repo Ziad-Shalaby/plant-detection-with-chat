@@ -428,7 +428,7 @@ if app_mode == "🏠 Home":
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image("https://images.unsplash.com/photo-1466781783364-36c955e42a7f?w=800", 
-                 width=None, caption="Identify plants instantly with AI")
+                 caption="Identify plants instantly with AI")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -548,7 +548,7 @@ elif app_mode == "🔍 Plant Detection":
         
         if uploaded_file:
             image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded Image", width=None)
+            st.image(image, caption="Uploaded Image")
             
             identify_btn = st.button("🔍 Identify Plant", use_container_width=True)
     
