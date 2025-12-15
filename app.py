@@ -4,7 +4,6 @@ import json
 import base64
 from PIL import Image
 import io
-import google.generativeai as genai
 from datetime import datetime
 
 # ----------------------------------
@@ -181,9 +180,10 @@ if 'detection_history' not in st.session_state:
 # API Configuration
 # ----------------------------------
 PLANT_ID_API_KEY = st.secrets.get("PLANT_ID_API_KEY", "")
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY", "")
 
-# Gemini will be configured in the chat function
+# AI Provider - Default to Hugging Face (FREE)
+AI_PROVIDER = st.secrets.get("AI_PROVIDER", "huggingface")
 
 # ----------------------------------
 # Plant.id API Functions
@@ -272,89 +272,80 @@ def check_health(image_data):
         return {"error": True, "message": f"Request failed: {str(e)}"}
 
 # ----------------------------------
-# Gemini Chat Functions
+# Hugging Face Chat Function (100% FREE)
 # ----------------------------------
-def chat_with_gemini(user_message, context=None):
+def chat_with_huggingface(user_message, context=None):
     """
-    Chat with Gemini AI about plants using the REST API directly
+    Chat using Hugging Face Free Inference API (100% FREE - No credit card needed!)
+    Uses Mistral-7B-Instruct model
     """
-    if not GEMINI_API_KEY:
-        return "Gemini API key not configured. Please add GEMINI_API_KEY to .streamlit/secrets.toml"
+    if not HUGGINGFACE_API_KEY:
+        return "⚠️ Hugging Face API key not configured. Please add HUGGINGFACE_API_KEY to .streamlit/secrets.toml"
     
     try:
-        # Use REST API directly instead of SDK
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        # Using Mistral-7B-Instruct (free and powerful)
+        url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
         
         # Build context-aware prompt
+        system_content = "You are a helpful plant expert assistant. Provide accurate advice about plant care, identification, diseases, and gardening. Be friendly and conversational."
+        
         if context:
-            system_instruction = f"""You are a helpful plant expert assistant. 
-            
+            system_content += f"""
+
 Current plant context:
 - Plant: {context.get('plant_name', 'Unknown')}
 - Scientific Name: {context.get('scientific_name', 'N/A')}
 - Health Status: {context.get('health_status', 'N/A')}
-- Disease: {context.get('disease', 'None detected')}
-
-Provide helpful, accurate advice about plant care, diseases, and gardening. Be friendly and conversational."""
-            
-            full_prompt = f"{system_instruction}\n\nUser question: {user_message}"
-        else:
-            full_prompt = f"""You are a helpful plant expert assistant. Provide accurate advice about plant care, identification, diseases, and gardening. Be friendly and conversational.
-
-User question: {user_message}"""
+- Disease: {context.get('disease', 'None detected')}"""
         
-        # Prepare the request payload
+        # Format prompt for Mistral
+        full_prompt = f"<s>[INST] {system_content}\n\nUser question: {user_message} [/INST]"
+        
         payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": full_prompt}
-                    ]
-                }
-            ],
-            "generationConfig": {
+            "inputs": full_prompt,
+            "parameters": {
+                "max_new_tokens": 500,
                 "temperature": 0.7,
-                "maxOutputTokens": 1000,
+                "top_p": 0.95,
+                "do_sample": True,
+                "return_full_text": False
             }
         }
         
         headers = {
+            "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
             "Content-Type": "application/json"
         }
         
-        # Make the API request
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=60)
         
-        # Check for errors
         if response.status_code == 200:
             result = response.json()
-            if 'candidates' in result and len(result['candidates']) > 0:
-                text = result['candidates'][0]['content']['parts'][0]['text']
-                return text
-            else:
-                return "⚠️ No response generated. Please try rephrasing your question."
+            if isinstance(result, list) and len(result) > 0:
+                generated_text = result[0].get('generated_text', '')
+                # Extract only the response part (after [/INST])
+                if '[/INST]' in generated_text:
+                    answer = generated_text.split('[/INST]')[-1].strip()
+                    return answer if answer else generated_text
+                return generated_text.strip()
+            return "⚠️ No response generated. Please try again."
         
-        elif response.status_code == 400:
-            error_data = response.json()
-            return f"⚠️ API Error: {error_data.get('error', {}).get('message', 'Invalid request')}\n\nPlease check your API key or try again."
+        elif response.status_code == 503:
+            return "⚠️ Model is loading (first time use). Please wait 20-30 seconds and try again."
         
-        elif response.status_code == 403:
-            return "⚠️ API key is invalid or doesn't have permission.\n\nSteps to fix:\n1. Go to https://aistudio.google.com/app/apikey\n2. Generate a new API key\n3. Update your .streamlit/secrets.toml file\n4. Restart the app"
-        
-        elif response.status_code == 404:
-            return "⚠️ Model not found. The Gemini API might be unavailable in your region.\n\nTry:\n1. Check if you can access https://aistudio.google.com\n2. Verify your API key is from Google AI Studio (not Google Cloud)\n3. Check if Gemini API is available in your country"
+        elif response.status_code == 401:
+            return "⚠️ Invalid Hugging Face API key. Please check your token at https://huggingface.co/settings/tokens"
         
         else:
-            return f"⚠️ API Error (Status {response.status_code}): {response.text}\n\nPlease try again or contact support."
-        
-    except requests.exceptions.Timeout:
-        return "⚠️ Request timed out. Please check your internet connection and try again."
+            return f"⚠️ API Error: {response.status_code} - {response.text}"
     
-    except requests.exceptions.ConnectionError:
-        return "⚠️ Cannot connect to Gemini API. Please check your internet connection."
+    except requests.exceptions.Timeout:
+        return "⚠️ Request timed out. The model might be loading. Please wait and try again."
     
     except Exception as e:
-        return f"⚠️ Unexpected error: {str(e)}\n\nPlease verify:\n1. Your API key at https://aistudio.google.com/app/apikey\n2. Your internet connection\n3. Try restarting the app"
+        return f"⚠️ Error: {str(e)}"
+
+
 # ----------------------------------
 # Sidebar
 # ----------------------------------
@@ -364,6 +355,11 @@ app_mode = st.sidebar.selectbox(
     "Select Page", 
     ["🏠 Home", "🔍 Plant Detection", "💬 AI Chat", "📚 My Plants"]
 )
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🤖 AI Provider")
+st.sidebar.success("🟠 **Hugging Face** (100% FREE)")
+st.sidebar.caption("Powered by Mistral-7B")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Quick Stats")
@@ -386,7 +382,7 @@ st.sidebar.info("""
 # ----------------------------------
 if app_mode == "🏠 Home":
     st.markdown("<h1>🌿 Plant Doctor AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>AI-Powered Plant Identification & Health Diagnosis</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>AI-Powered Plant Identification & Health Diagnosis - 100% FREE</p>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -462,8 +458,8 @@ if app_mode == "🏠 Home":
     with col4:
         st.markdown("""
         <div class="stat-box">
-            <div class="stat-number">⚡</div>
-            <div>Instant</div>
+            <div class="stat-number">💯</div>
+            <div>FREE</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -475,24 +471,31 @@ if app_mode == "🏠 Home":
     1. Go to **Plant Detection** page
     2. Upload a clear photo of your plant
     3. Get instant identification and health assessment
-    4. Chat with AI for personalized advice
+    4. Chat with AI for personalized advice (100% FREE)
     """)
     
     # API Setup Warning
-    if not PLANT_ID_API_KEY or not GEMINI_API_KEY:
+    if not PLANT_ID_API_KEY or not HUGGINGFACE_API_KEY:
         st.warning("""
-        ⚠️ **API Keys Required**
+        ⚠️ **FREE API Keys Required**
         
-        To use this app, you need to configure API keys:
-        1. Get Plant.id API key from https://web.plant.id/
-        2. Get Gemini API key from https://makersuite.google.com/app/apikey
-        3. Create `.streamlit/secrets.toml` file with:
-        ```
+        To use this app, you need to configure FREE API keys in `.streamlit/secrets.toml`:
+        
+        **1. Plant.id (100 free requests/month):**
+        - Get FREE API key from https://web.plant.id/
+        
+        **2. Hugging Face (100% FREE - Unlimited!):**
+        - Sign up at https://huggingface.co/join (NO credit card!)
+        - Get token at https://huggingface.co/settings/tokens
+        
+        **Example secrets.toml:**
+        ```toml
         PLANT_ID_API_KEY = "your_plant_id_key"
-        GEMINI_API_KEY = "your_gemini_key"
+        HUGGINGFACE_API_KEY = "hf_your_token"
+        AI_PROVIDER = "huggingface"
         ```
         
-        **Free tiers available for both services!**
+        **Both services are 100% FREE!** ✨
         """)
 
 # ----------------------------------
@@ -676,14 +679,36 @@ elif app_mode == "🔍 Plant Detection":
             st.info("👆 Upload an image to get started")
 
 # ----------------------------------
-# AI Chat Page
+# AI Chat Page (FREE with Hugging Face)
 # ----------------------------------
 elif app_mode == "💬 AI Chat":
-    st.markdown("<h1>💬 Chat with Plant Expert AI</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>💬 Chat with Plant Expert AI (100% FREE)</h1>", unsafe_allow_html=True)
     
-    if not GEMINI_API_KEY:
-        st.error("⚠️ Gemini API key not configured. Please add it to .streamlit/secrets.toml")
+    # Check if Hugging Face API key is configured
+    if not HUGGINGFACE_API_KEY:
+        st.error("""
+        ⚠️ **Hugging Face API Key Not Configured**
+        
+        Get your FREE API key (no credit card needed!):
+        
+        **Steps:**
+        1. Go to https://huggingface.co/join
+        2. Create free account
+        3. Go to Settings → Access Tokens
+        4. Create new token (read access)
+        5. Add to `.streamlit/secrets.toml`:
+        
+        ```toml
+        HUGGINGFACE_API_KEY = "hf_your_token_here"
+        AI_PROVIDER = "huggingface"
+        ```
+        
+        **Completely FREE - No credit card required!** ✨
+        """)
         st.stop()
+    
+    # Show current AI provider
+    st.info("🟠 Using: **HUGGING FACE** (100% FREE) - Powered by Mistral-7B")
     
     # Display context if available
     if st.session_state.plant_context:
@@ -736,8 +761,8 @@ elif app_mode == "💬 AI Chat":
         })
         
         # Get AI response
-        with st.spinner("🤔 Thinking..."):
-            response = chat_with_gemini(user_input, st.session_state.plant_context)
+        with st.spinner("🤔 Thinking... (First request may take 20-30 seconds to load model)"):
+            response = chat_with_huggingface(user_input, st.session_state.plant_context)
         
         # Add bot response
         st.session_state.chat_history.append({
@@ -765,43 +790,4 @@ elif app_mode == "💬 AI Chat":
                         'role': 'user',
                         'content': question
                     })
-                    response = chat_with_gemini(question, st.session_state.plant_context)
-                    st.session_state.chat_history.append({
-                        'role': 'assistant',
-                        'content': response
-                    })
-                    st.rerun()
-    
-    # Clear Chat
-    if len(st.session_state.chat_history) > 0:
-        if st.button("🗑️ Clear Chat History"):
-            st.session_state.chat_history = []
-            st.rerun()
-
-# ----------------------------------
-# My Plants Page
-# ----------------------------------
-elif app_mode == "📚 My Plants":
-    st.markdown("<h1>📚 My Plant Collection</h1>", unsafe_allow_html=True)
-    
-    if not st.session_state.detection_history:
-        st.info("🌱 You haven't identified any plants yet. Go to Plant Detection to get started!")
-    else:
-        st.markdown(f"### Total Identifications: {len(st.session_state.detection_history)}")
-        
-        for i, record in enumerate(reversed(st.session_state.detection_history)):
-            with st.expander(f"🌿 {record['plant_name']} - {record['timestamp']}"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**Plant:** {record['plant_name']}")
-                    st.write(f"**Type:** {record['type'].title()}")
-                with col2:
-                    st.write(f"**Date:** {record['timestamp']}")
-                    if record.get('disease'):
-                        st.write(f"**Disease:** {record['disease']}")
-        
-        if st.button("🗑️ Clear History"):
-            st.session_state.detection_history = []
-            st.rerun()
-
-
+                    with st.spinner("🤔 Thinking..."):
