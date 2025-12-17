@@ -712,53 +712,6 @@ if app_mode == "🏠 Home":
     
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Getting Started
-    st.markdown("### 🚀 Get Started (100% FREE!)")
-    
-    st.info("""
-    **Choose ONE or MORE FREE options:**
-    
-    ### Option 1: Mistral Pixtral (RECOMMENDED ⭐)
-    - **FREE tier available**
-    - **Excellent vision model** (Pixtral-12B)
-    - **Very reliable** - works great in Egypt 🇪🇬
-    - **No credit card needed for testing**
-    
-    1. Visit: https://console.mistral.ai/api-keys/
-    2. Sign up FREE
-    3. Create API key
-    4. Add to `.streamlit/secrets.toml`:
-    ```toml
-    MISTRAL_API_KEY = "your_key_here"
-    ```
-    
-    ### Option 2: Groq (Fast Alternative)
-    - **Completely FREE forever**
-    - **Fastest AI** ⚡
-    - **Works in Egypt** 🇪🇬
-    
-    1. Visit: https://console.groq.com/keys
-    2. Sign up FREE
-    3. Create API key
-    4. Add to `.streamlit/secrets.toml`:
-    ```toml
-    GROQ_API_KEY = "gsk_..."
-    ```
-    
-    ### Option 3: Together AI (Backup)
-    - **FREE $25 credits** for new users
-    
-    1. Visit: https://api.together.xyz/settings/api-keys
-    2. Sign up
-    3. Get FREE $25 credits
-    4. Add to `.streamlit/secrets.toml`:
-    ```toml
-    TOGETHER_API_KEY = "your_key_here"
-    ```
-    
-    **The app tries all APIs automatically until one works!**
-    """)
-    
     # API Status
     if not MISTRAL_API_KEY and not GROQ_API_KEY and not TOGETHER_API_KEY:
         st.error("""
@@ -1001,3 +954,4 @@ elif app_mode == "📚 My Plants":
         if st.button("🗑️ Clear History"):
             st.session_state.detection_history = []
             st.rerun()
+
