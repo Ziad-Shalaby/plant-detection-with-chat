@@ -161,10 +161,11 @@ if 'detection_history' not in st.session_state:
     st.session_state.detection_history = []
 
 # ----------------------------------
-# API Configuration - Multiple Options!
+# API Configuration - Multiple FREE Options!
 # ----------------------------------
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")  # FREE and FAST!
 TOGETHER_API_KEY = st.secrets.get("TOGETHER_API_KEY", "")  # FREE credits
+MISTRAL_API_KEY = st.secrets.get("MISTRAL_API_KEY", "")  # FREE tier available
 
 # ----------------------------------
 # Plant Detection with Groq (FREE Vision AI!)
@@ -172,8 +173,7 @@ TOGETHER_API_KEY = st.secrets.get("TOGETHER_API_KEY", "")  # FREE credits
 def detect_plant_with_groq_llama_vision(image_data):
     """
     Detect plant using Groq's Llama 3.2 Vision (100% FREE!)
-    Groq offers FREE API access with very high rate limits
-    Works PERFECTLY in Egypt!
+    Note: Groq vision is still in preview and may have limitations
     """
     if not GROQ_API_KEY:
         return {
@@ -182,9 +182,14 @@ def detect_plant_with_groq_llama_vision(image_data):
         }
     
     try:
-        # Convert image to base64
+        # Resize image to reduce size (Groq has size limits)
+        max_size = (800, 800)
+        image_copy = image_data.copy()
+        image_copy.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        # Convert to base64
         buffered = io.BytesIO()
-        image_data.save(buffered, format="JPEG")
+        image_copy.save(buffered, format="JPEG", quality=85)
         img_base64 = base64.b64encode(buffered.getvalue()).decode()
         
         # Groq API endpoint
@@ -195,32 +200,25 @@ def detect_plant_with_groq_llama_vision(image_data):
             "Authorization": f"Bearer {GROQ_API_KEY}"
         }
         
-        # Detailed prompt for plant identification
+        # Simplified prompt that works better with vision models
         payload = {
-            "model": "llama-3.2-90b-vision-preview",  # FREE vision model!
+            "model": "llama-3.2-11b-vision-preview",  # Using 11B model (more stable)
             "messages": [
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": """Analyze this plant image and provide detailed identification.
+                            "text": """Look at this plant image. Identify it and provide:
+- Common name
+- Scientific name (Genus species)
+- Plant family
+- Brief description (2-3 sentences)
+- 3 care tips
+- Is it edible?
+- Native region
 
-Please provide your response in this EXACT JSON format:
-{
-    "plant_name": "Common name",
-    "scientific_name": "Genus species",
-    "family": "Plant family",
-    "confidence": 90,
-    "description": "Brief description",
-    "care_tips": ["Watering tip", "Sunlight tip", "Soil tip"],
-    "interesting_facts": "Interesting fact",
-    "common_issues": ["Issue 1", "Issue 2"],
-    "is_edible": true,
-    "native_region": "Region"
-}
-
-Consider plants common in Egypt and Middle East. Be accurate with confidence level (0-100)."""
+Format as JSON."""
                         },
                         {
                             "type": "image_url",
@@ -231,8 +229,8 @@ Consider plants common in Egypt and Middle East. Be accurate with confidence lev
                     ]
                 }
             ],
-            "max_tokens": 1500,
-            "temperature": 0.3
+            "max_tokens": 1000,
+            "temperature": 0.2
         }
         
         response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
@@ -245,23 +243,30 @@ Consider plants common in Egypt and Middle East. Be accurate with confidence lev
                 
                 try:
                     import re
+                    # Clean up response
                     text_content = re.sub(r'```json\s*|\s*```', '', text_content).strip()
                     json_match = re.search(r'\{[\s\S]*\}', text_content)
                     
                     if json_match:
                         plant_data = json.loads(json_match.group())
+                        # Ensure we have required fields
+                        if "plant_name" not in plant_data:
+                            plant_data["plant_name"] = "Detected Plant"
+                        if "confidence" not in plant_data:
+                            plant_data["confidence"] = 85
                     else:
+                        # Extract info from text response
                         plant_data = {
                             "plant_name": "Detected Plant",
                             "description": text_content[:500],
-                            "confidence": 85
+                            "confidence": 80
                         }
                     
                     return {
                         "error": False,
                         "data": plant_data,
                         "raw_response": text_content,
-                        "source": "Groq Llama Vision"
+                        "source": "Groq Llama 11B Vision"
                     }
                 except json.JSONDecodeError:
                     return {
@@ -269,7 +274,7 @@ Consider plants common in Egypt and Middle East. Be accurate with confidence lev
                         "data": {
                             "plant_name": "Detected Plant",
                             "description": text_content[:500],
-                            "confidence": 80
+                            "confidence": 75
                         },
                         "raw_response": text_content,
                         "source": "Groq Llama Vision"
@@ -277,8 +282,117 @@ Consider plants common in Egypt and Middle East. Be accurate with confidence lev
             else:
                 return {"error": True, "message": "No content in response"}
         else:
-            return {"error": True, "message": f"API Error: {response.status_code}"}
+            error_detail = ""
+            try:
+                error_data = response.json()
+                error_detail = f" - {error_data.get('error', {}).get('message', '')}"
+            except:
+                pass
+            return {"error": True, "message": f"API Error: {response.status_code}{error_detail}"}
             
+    except Exception as e:
+        return {"error": True, "message": f"Error: {str(e)}"}
+
+
+# ----------------------------------
+# Plant Detection with Pixtral (Mistral Vision - FREE!)
+# ----------------------------------
+def detect_plant_with_mistral_vision(image_data):
+    """
+    Detect plant using Mistral's Pixtral vision model (FREE!)
+    Very reliable and works great in Egypt
+    """
+    if not MISTRAL_API_KEY:
+        return {"error": True, "message": "Mistral API key not configured"}
+    
+    try:
+        # Resize image
+        max_size = (1024, 1024)
+        image_copy = image_data.copy()
+        image_copy.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        buffered = io.BytesIO()
+        image_copy.save(buffered, format="JPEG", quality=90)
+        img_base64 = base64.b64encode(buffered.getvalue()).decode()
+        
+        API_URL = "https://api.mistral.ai/v1/chat/completions"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {MISTRAL_API_KEY}"
+        }
+        
+        payload = {
+            "model": "pixtral-12b-2409",  # FREE vision model
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": """Identify this plant. Provide in JSON format:
+{
+    "plant_name": "common name",
+    "scientific_name": "Genus species",
+    "family": "family name",
+    "confidence": 90,
+    "description": "brief description",
+    "care_tips": ["tip1", "tip2", "tip3"],
+    "interesting_facts": "fact",
+    "common_issues": ["issue1", "issue2"],
+    "is_edible": true/false,
+    "native_region": "region"
+}"""
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": f"data:image/jpeg;base64,{img_base64}"
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.3
+        }
+        
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if "choices" in result:
+                text_content = result["choices"][0]["message"]["content"]
+                
+                try:
+                    import re
+                    text_content = re.sub(r'```json\s*|\s*```', '', text_content).strip()
+                    json_match = re.search(r'\{[\s\S]*\}', text_content)
+                    
+                    if json_match:
+                        plant_data = json.loads(json_match.group())
+                        if "plant_name" not in plant_data:
+                            plant_data["plant_name"] = "Detected Plant"
+                        if "confidence" not in plant_data:
+                            plant_data["confidence"] = 85
+                        
+                        return {
+                            "error": False,
+                            "data": plant_data,
+                            "source": "Mistral Pixtral Vision"
+                        }
+                except:
+                    pass
+                
+                return {
+                    "error": False,
+                    "data": {
+                        "plant_name": "Detected Plant",
+                        "description": text_content[:500],
+                        "confidence": 80
+                    },
+                    "source": "Mistral Pixtral"
+                }
+        
+        return {"error": True, "message": f"API Error: {response.status_code}"}
     except Exception as e:
         return {"error": True, "message": f"Error: {str(e)}"}
 
@@ -386,7 +500,17 @@ def smart_plant_detection(image_data):
     """
     st.info("🔄 Trying FREE AI models...")
     
-    # Try Groq first (FREE and FAST!)
+    # Try Mistral Pixtral first (very reliable!)
+    if MISTRAL_API_KEY:
+        with st.spinner("🎯 Trying Mistral Pixtral Vision (FREE)..."):
+            result = detect_plant_with_mistral_vision(image_data)
+            if not result.get("error"):
+                st.success(f"✅ Success with {result.get('source', 'Mistral')}!")
+                return result
+            else:
+                st.warning(f"⚠️ Mistral failed: {result.get('message')}")
+    
+    # Try Groq (FREE and FAST!)
     if GROQ_API_KEY:
         with st.spinner("🚀 Trying Groq Llama Vision (FREE)..."):
             result = detect_plant_with_groq_llama_vision(image_data)
@@ -408,7 +532,7 @@ def smart_plant_detection(image_data):
     
     return {
         "error": True,
-        "message": "All FREE APIs failed. Please check your API keys or try again later."
+        "message": "All FREE APIs failed. Please check your API keys or try again later. Make sure you have at least one valid API key configured."
     }
 
 
@@ -480,11 +604,13 @@ st.sidebar.metric("Status", "100% FREE! 🎉")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💡 Active APIs")
+if MISTRAL_API_KEY:
+    st.sidebar.success("✅ Mistral Pixtral")
 if GROQ_API_KEY:
-    st.sidebar.success("✅ Groq (FREE)")
+    st.sidebar.success("✅ Groq")
 if TOGETHER_API_KEY:
     st.sidebar.success("✅ Together AI")
-if not GROQ_API_KEY and not TOGETHER_API_KEY:
+if not MISTRAL_API_KEY and not GROQ_API_KEY and not TOGETHER_API_KEY:
     st.sidebar.error("❌ No API keys")
 
 # ----------------------------------
@@ -510,9 +636,9 @@ if app_mode == "🏠 Home":
     with col1:
         st.markdown("""
         <div class="feature-card">
-            <div style="font-size: 48px;">🚀</div>
-            <h3>Groq Llama Vision</h3>
-            <p>Super fast, completely FREE, works in Egypt!</p>
+            <div style="font-size: 48px;">🎯</div>
+            <h3>Mistral Pixtral Vision</h3>
+            <p>Excellent vision AI, completely FREE!</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -531,13 +657,26 @@ if app_mode == "🏠 Home":
     st.markdown("### 🚀 Get Started (100% FREE!)")
     
     st.info("""
-    **Choose ONE or BOTH FREE options:**
+    **Choose ONE or MORE FREE options:**
     
-    ### Option 1: Groq (RECOMMENDED ⭐)
+    ### Option 1: Mistral Pixtral (RECOMMENDED ⭐)
+    - **FREE tier available**
+    - **Excellent vision model** (Pixtral-12B)
+    - **Very reliable** - works great in Egypt 🇪🇬
+    - **No credit card needed for testing**
+    
+    1. Visit: https://console.mistral.ai/api-keys/
+    2. Sign up FREE
+    3. Create API key
+    4. Add to `.streamlit/secrets.toml`:
+    ```toml
+    MISTRAL_API_KEY = "your_key_here"
+    ```
+    
+    ### Option 2: Groq (Fast Alternative)
     - **Completely FREE forever**
-    - **Fastest AI in the world** ⚡
-    - **Works perfectly in Egypt** 🇪🇬
-    - **No credit card needed**
+    - **Fastest AI** ⚡
+    - **Works in Egypt** 🇪🇬
     
     1. Visit: https://console.groq.com/keys
     2. Sign up FREE
@@ -547,9 +686,8 @@ if app_mode == "🏠 Home":
     GROQ_API_KEY = "gsk_..."
     ```
     
-    ### Option 2: Together AI (Backup)
+    ### Option 3: Together AI (Backup)
     - **FREE $25 credits** for new users
-    - Good vision models
     
     1. Visit: https://api.together.xyz/settings/api-keys
     2. Sign up
@@ -559,20 +697,21 @@ if app_mode == "🏠 Home":
     TOGETHER_API_KEY = "your_key_here"
     ```
     
-    **The app will try all available APIs automatically!**
+    **The app tries all APIs automatically until one works!**
     """)
     
     # API Status
-    if not GROQ_API_KEY and not TOGETHER_API_KEY:
+    if not MISTRAL_API_KEY and not GROQ_API_KEY and not TOGETHER_API_KEY:
         st.error("""
         ⚠️ **No API Keys Configured**
         
         Please add at least one API key to get started.
         
-        **Groq is RECOMMENDED** - it's completely free and fastest! 🚀
+        **Mistral Pixtral is RECOMMENDED** - excellent vision model! 🎯
+        **Groq is fastest** - good backup option! 🚀
         """)
     else:
-        api_count = sum([bool(GROQ_API_KEY), bool(TOGETHER_API_KEY)])
+        api_count = sum([bool(MISTRAL_API_KEY), bool(GROQ_API_KEY), bool(TOGETHER_API_KEY)])
         st.success(f"✅ {api_count} FREE API(s) configured! Ready to identify plants.")
 
 # ----------------------------------
@@ -581,10 +720,13 @@ if app_mode == "🏠 Home":
 elif app_mode == "🔍 Plant Detection":
     st.markdown("<h1>🔍 Plant Identification</h1>", unsafe_allow_html=True)
     
-    if not GROQ_API_KEY and not TOGETHER_API_KEY:
+    if not MISTRAL_API_KEY and not GROQ_API_KEY and not TOGETHER_API_KEY:
         st.error("⚠️ At least one FREE API key required.")
         st.info("""
-        **Get Groq FREE API (RECOMMENDED):**
+        **Get Mistral FREE API (RECOMMENDED):**
+        https://console.mistral.ai/api-keys/
+        
+        **Or Groq FREE API (fastest):**
         https://console.groq.com/keys
         
         **Or Together AI ($25 FREE credits):**
