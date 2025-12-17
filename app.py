@@ -537,54 +537,113 @@ def smart_plant_detection(image_data):
 
 
 # ----------------------------------
-# Chat with Groq (FREE and SUPER FAST!)
+# Chat Functions (Multiple FREE Options)
 # ----------------------------------
-def chat_with_groq(user_message, context=None):
+def chat_with_ai(user_message, context=None):
     """
-    Chat using Groq's FREE API (fastest AI in the world!)
+    Chat using multiple FREE AI APIs with fallback
     """
-    if not GROQ_API_KEY:
-        return "Groq API key not configured."
+    # Build system prompt
+    if context:
+        system_prompt = f"""You are a helpful plant expert specializing in Egypt and Middle East.
+
+Current plant context:
+- Plant: {context.get('plant_name', 'Unknown')}
+- Scientific Name: {context.get('scientific_name', 'N/A')}
+- Family: {context.get('family', 'N/A')}
+
+Provide practical, actionable advice suitable for Egyptian climate. Be concise, friendly, and focus on real-world tips."""
+    else:
+        system_prompt = "You are a knowledgeable plant expert with expertise in Egyptian and Middle Eastern plants, climate, and gardening. Provide helpful, practical advice. Be concise and friendly."
     
-    try:
-        API_URL = "https://api.groq.com/openai/v1/chat/completions"
-        
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {GROQ_API_KEY}"
-        }
-        
-        if context:
-            system_prompt = f"""You are a helpful plant expert for Egypt and Middle East.
-
-Current plant: {context.get('plant_name', 'Unknown')}
-Scientific: {context.get('scientific_name', 'N/A')}
-Family: {context.get('family', 'N/A')}
-
-Provide practical advice for Egyptian climate. Be concise and friendly."""
-        else:
-            system_prompt = "You are a plant expert specializing in Egyptian and Middle Eastern plants. Be helpful and concise."
-        
-        payload = {
-            "model": "llama-3.1-70b-versatile",  # FREE model!
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            "max_tokens": 1000,
-            "temperature": 0.7
-        }
-        
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if "choices" in result:
-                return result["choices"][0]["message"]["content"]
-        
-        return f"Error: {response.status_code}"
-    except Exception as e:
-        return f"Error: {str(e)}"
+    # Try Groq first (fastest)
+    if GROQ_API_KEY:
+        try:
+            API_URL = "https://api.groq.com/openai/v1/chat/completions"
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {GROQ_API_KEY}"
+            }
+            
+            payload = {
+                "model": "llama-3.1-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                "max_tokens": 800,
+                "temperature": 0.7
+            }
+            
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and len(result["choices"]) > 0:
+                    return result["choices"][0]["message"]["content"]
+        except Exception as e:
+            pass  # Fall through to next API
+    
+    # Try Mistral as backup
+    if MISTRAL_API_KEY:
+        try:
+            API_URL = "https://api.mistral.ai/v1/chat/completions"
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {MISTRAL_API_KEY}"
+            }
+            
+            payload = {
+                "model": "mistral-small-latest",  # FREE tier
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                "max_tokens": 800,
+                "temperature": 0.7
+            }
+            
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and len(result["choices"]) > 0:
+                    return result["choices"][0]["message"]["content"]
+        except Exception as e:
+            pass  # Fall through to next API
+    
+    # Try Together AI as last resort
+    if TOGETHER_API_KEY:
+        try:
+            API_URL = "https://api.together.xyz/v1/chat/completions"
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {TOGETHER_API_KEY}"
+            }
+            
+            payload = {
+                "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                "max_tokens": 800,
+                "temperature": 0.7
+            }
+            
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and len(result["choices"]) > 0:
+                    return result["choices"][0]["message"]["content"]
+        except Exception as e:
+            pass
+    
+    return "❌ All chat APIs failed. Please check your API keys are valid. Make sure you have at least one API key (Groq, Mistral, or Together AI) configured in your secrets.toml file."
 
 
 # ----------------------------------
@@ -835,9 +894,14 @@ elif app_mode == "🔍 Plant Detection":
 elif app_mode == "💬 AI Chat":
     st.markdown("<h1>💬 FREE AI Plant Expert</h1>", unsafe_allow_html=True)
     
-    if not GROQ_API_KEY:
-        st.error("⚠️ Groq API key needed for chat.")
-        st.info("Get FREE key: https://console.groq.com/keys")
+    if not MISTRAL_API_KEY and not GROQ_API_KEY and not TOGETHER_API_KEY:
+        st.error("⚠️ At least one API key needed for chat.")
+        st.info("""
+        Get a FREE API key from:
+        - Mistral: https://console.mistral.ai/api-keys/
+        - Groq: https://console.groq.com/keys
+        - Together AI: https://api.together.xyz/settings/api-keys
+        """)
         st.stop()
     
     # Display context
@@ -883,7 +947,7 @@ elif app_mode == "💬 AI Chat":
         st.session_state.chat_history.append({'role': 'user', 'content': user_input})
         
         with st.spinner("🤔 AI thinking..."):
-            response = chat_with_groq(user_input, st.session_state.plant_context)
+            response = chat_with_ai(user_input, st.session_state.plant_context)
         
         st.session_state.chat_history.append({'role': 'assistant', 'content': response})
         st.rerun()
@@ -904,7 +968,7 @@ elif app_mode == "💬 AI Chat":
                 if st.button(q, key=f"q_{i}"):
                     st.session_state.chat_history.append({'role': 'user', 'content': q})
                     with st.spinner("🤔 Thinking..."):
-                        response = chat_with_groq(q, st.session_state.plant_context)
+                        response = chat_with_ai(q, st.session_state.plant_context)
                     st.session_state.chat_history.append({'role': 'assistant', 'content': response})
                     st.rerun()
     
