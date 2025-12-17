@@ -161,22 +161,24 @@ if 'detection_history' not in st.session_state:
     st.session_state.detection_history = []
 
 # ----------------------------------
-# API Configuration
+# API Configuration - Multiple Options!
 # ----------------------------------
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")  # FREE and FAST!
+TOGETHER_API_KEY = st.secrets.get("TOGETHER_API_KEY", "")  # FREE credits
 
 # ----------------------------------
-# Plant Detection Functions with GPT-4 Vision
+# Plant Detection with Groq (FREE Vision AI!)
 # ----------------------------------
-def detect_plant_with_gpt4_vision(image_data):
+def detect_plant_with_groq_llama_vision(image_data):
     """
-    Detect plant using OpenAI's GPT-4 Vision (Works in Egypt!)
-    GPT-4o-mini is FREE and very accurate for plant identification
+    Detect plant using Groq's Llama 3.2 Vision (100% FREE!)
+    Groq offers FREE API access with very high rate limits
+    Works PERFECTLY in Egypt!
     """
-    if not OPENAI_API_KEY:
+    if not GROQ_API_KEY:
         return {
             "error": True,
-            "message": "OpenAI API key not configured"
+            "message": "Groq API key not configured"
         }
     
     try:
@@ -185,17 +187,17 @@ def detect_plant_with_gpt4_vision(image_data):
         image_data.save(buffered, format="JPEG")
         img_base64 = base64.b64encode(buffered.getvalue()).decode()
         
-        # OpenAI API endpoint
-        API_URL = "https://api.openai.com/v1/chat/completions"
+        # Groq API endpoint
+        API_URL = "https://api.groq.com/openai/v1/chat/completions"
         
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENAI_API_KEY}"
+            "Authorization": f"Bearer {GROQ_API_KEY}"
         }
         
         # Detailed prompt for plant identification
         payload = {
-            "model": "gpt-4o-mini",  # Free tier model with vision capabilities
+            "model": "llama-3.2-90b-vision-preview",  # FREE vision model!
             "messages": [
                 {
                     "role": "user",
@@ -204,21 +206,21 @@ def detect_plant_with_gpt4_vision(image_data):
                             "type": "text",
                             "text": """Analyze this plant image and provide detailed identification.
 
-Please provide your response in this EXACT JSON format (make sure it's valid JSON):
+Please provide your response in this EXACT JSON format:
 {
-    "plant_name": "Common name of the plant",
+    "plant_name": "Common name",
     "scientific_name": "Genus species",
     "family": "Plant family",
-    "confidence": 95,
-    "description": "Brief 2-3 sentence description of the plant",
-    "care_tips": ["Watering: tip here", "Sunlight: tip here", "Soil: tip here"],
-    "interesting_facts": "One interesting fact about this plant",
-    "common_issues": ["Common disease or problem", "Another issue"],
+    "confidence": 90,
+    "description": "Brief description",
+    "care_tips": ["Watering tip", "Sunlight tip", "Soil tip"],
+    "interesting_facts": "Interesting fact",
+    "common_issues": ["Issue 1", "Issue 2"],
     "is_edible": true,
-    "native_region": "Geographic region"
+    "native_region": "Region"
 }
 
-Be specific and accurate. Consider plants that grow in Egypt and Middle East. If you're not certain about the exact species, provide your best identification with appropriate confidence level (0-100)."""
+Consider plants common in Egypt and Middle East. Be accurate with confidence level (0-100)."""
                         },
                         {
                             "type": "image_url",
@@ -238,26 +240,19 @@ Be specific and accurate. Consider plants that grow in Egypt and Middle East. If
         if response.status_code == 200:
             result = response.json()
             
-            # Extract the text content from GPT-4 response
             if "choices" in result and len(result["choices"]) > 0:
                 text_content = result["choices"][0]["message"]["content"]
                 
-                # Try to parse JSON from the response
                 try:
                     import re
-                    # Remove markdown code blocks if present
-                    text_content = re.sub(r'```json\s*|\s*```', '', text_content)
-                    text_content = text_content.strip()
-                    
-                    # Find JSON in the response
+                    text_content = re.sub(r'```json\s*|\s*```', '', text_content).strip()
                     json_match = re.search(r'\{[\s\S]*\}', text_content)
+                    
                     if json_match:
                         plant_data = json.loads(json_match.group())
                     else:
-                        # If no JSON, create structured data from text
                         plant_data = {
                             "plant_name": "Detected Plant",
-                            "scientific_name": "Analysis in progress",
                             "description": text_content[:500],
                             "confidence": 85
                         }
@@ -265,10 +260,10 @@ Be specific and accurate. Consider plants that grow in Egypt and Middle East. If
                     return {
                         "error": False,
                         "data": plant_data,
-                        "raw_response": text_content
+                        "raw_response": text_content,
+                        "source": "Groq Llama Vision"
                     }
                 except json.JSONDecodeError:
-                    # Return raw text if JSON parsing fails
                     return {
                         "error": False,
                         "data": {
@@ -276,74 +271,181 @@ Be specific and accurate. Consider plants that grow in Egypt and Middle East. If
                             "description": text_content[:500],
                             "confidence": 80
                         },
-                        "raw_response": text_content
+                        "raw_response": text_content,
+                        "source": "Groq Llama Vision"
                     }
             else:
-                return {
-                    "error": True,
-                    "message": "No content in response"
-                }
+                return {"error": True, "message": "No content in response"}
         else:
-            error_msg = f"API Error: {response.status_code}"
-            try:
-                error_data = response.json()
-                error_msg += f" - {error_data.get('error', {}).get('message', response.text)}"
-            except:
-                error_msg += f" - {response.text}"
-            
-            return {
-                "error": True,
-                "message": error_msg
-            }
+            return {"error": True, "message": f"API Error: {response.status_code}"}
             
     except Exception as e:
-        return {"error": True, "message": f"Detection failed: {str(e)}"}
+        return {"error": True, "message": f"Error: {str(e)}"}
 
 
 # ----------------------------------
-# Chat Functions with GPT-4
+# Plant Detection with Together AI (FREE credits!)
 # ----------------------------------
-def chat_with_gpt4(user_message, context=None):
+def detect_plant_with_together(image_data):
     """
-    Chat with GPT-4 about plants
+    Detect plant using Together AI's vision models (FREE $25 credits!)
     """
-    if not OPENAI_API_KEY:
-        return "OpenAI API key not configured. Please add OPENAI_API_KEY to .streamlit/secrets.toml"
+    if not TOGETHER_API_KEY:
+        return {"error": True, "message": "Together API key not configured"}
     
     try:
-        API_URL = "https://api.openai.com/v1/chat/completions"
+        buffered = io.BytesIO()
+        image_data.save(buffered, format="JPEG")
+        img_base64 = base64.b64encode(buffered.getvalue()).decode()
+        
+        API_URL = "https://api.together.xyz/v1/chat/completions"
         
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENAI_API_KEY}"
+            "Authorization": f"Bearer {TOGETHER_API_KEY}"
         }
         
-        # Build context-aware system prompt
-        if context:
-            system_prompt = f"""You are a helpful plant expert assistant with extensive knowledge of botany, horticulture, and plant care, especially for plants that grow in Egypt and the Middle East.
-
-Current plant context:
-- Plant: {context.get('plant_name', 'Unknown')}
-- Scientific Name: {context.get('scientific_name', 'N/A')}
-- Family: {context.get('family', 'N/A')}
-
-Provide helpful, accurate, and practical advice about plant care, diseases, identification, and gardening. Be friendly, conversational, and concise. Focus on actionable tips suitable for Egyptian climate."""
-        else:
-            system_prompt = """You are a helpful plant expert assistant with extensive knowledge of botany, horticulture, and plant care, especially for plants that grow in Egypt and the Middle East.
-
-Provide accurate, practical advice about plant identification, care, diseases, and gardening. Be friendly, conversational, and concise. Focus on actionable tips suitable for Egyptian climate and conditions."""
-        
         payload = {
-            "model": "gpt-4o-mini",  # Free tier model
+            "model": "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
             "messages": [
                 {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
                     "role": "user",
-                    "content": user_message
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": """Identify this plant and provide details in JSON format:
+{
+    "plant_name": "Common name",
+    "scientific_name": "Genus species",
+    "family": "Family",
+    "confidence": 90,
+    "description": "Brief description",
+    "care_tips": ["tip1", "tip2", "tip3"],
+    "interesting_facts": "Fact",
+    "common_issues": ["issue1", "issue2"],
+    "is_edible": true,
+    "native_region": "Region"
+}"""
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{img_base64}"
+                            }
+                        }
+                    ]
                 }
+            ],
+            "max_tokens": 1500,
+            "temperature": 0.3
+        }
+        
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if "choices" in result:
+                text_content = result["choices"][0]["message"]["content"]
+                
+                try:
+                    import re
+                    text_content = re.sub(r'```json\s*|\s*```', '', text_content).strip()
+                    json_match = re.search(r'\{[\s\S]*\}', text_content)
+                    
+                    if json_match:
+                        plant_data = json.loads(json_match.group())
+                        return {
+                            "error": False,
+                            "data": plant_data,
+                            "source": "Together AI"
+                        }
+                except:
+                    pass
+                
+                return {
+                    "error": False,
+                    "data": {
+                        "plant_name": "Detected Plant",
+                        "description": text_content[:500],
+                        "confidence": 80
+                    },
+                    "source": "Together AI"
+                }
+        
+        return {"error": True, "message": f"API Error: {response.status_code}"}
+    except Exception as e:
+        return {"error": True, "message": f"Error: {str(e)}"}
+
+
+# ----------------------------------
+# Smart Plant Detection (tries multiple free APIs)
+# ----------------------------------
+def smart_plant_detection(image_data):
+    """
+    Try multiple FREE APIs in order until one works
+    """
+    st.info("🔄 Trying FREE AI models...")
+    
+    # Try Groq first (FREE and FAST!)
+    if GROQ_API_KEY:
+        with st.spinner("🚀 Trying Groq Llama Vision (FREE)..."):
+            result = detect_plant_with_groq_llama_vision(image_data)
+            if not result.get("error"):
+                st.success(f"✅ Success with {result.get('source', 'Groq')}!")
+                return result
+            else:
+                st.warning(f"⚠️ Groq failed: {result.get('message')}")
+    
+    # Try Together AI (FREE $25 credits)
+    if TOGETHER_API_KEY:
+        with st.spinner("🔄 Trying Together AI (FREE)..."):
+            result = detect_plant_with_together(image_data)
+            if not result.get("error"):
+                st.success(f"✅ Success with {result.get('source', 'Together')}!")
+                return result
+            else:
+                st.warning(f"⚠️ Together AI failed: {result.get('message')}")
+    
+    return {
+        "error": True,
+        "message": "All FREE APIs failed. Please check your API keys or try again later."
+    }
+
+
+# ----------------------------------
+# Chat with Groq (FREE and SUPER FAST!)
+# ----------------------------------
+def chat_with_groq(user_message, context=None):
+    """
+    Chat using Groq's FREE API (fastest AI in the world!)
+    """
+    if not GROQ_API_KEY:
+        return "Groq API key not configured."
+    
+    try:
+        API_URL = "https://api.groq.com/openai/v1/chat/completions"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GROQ_API_KEY}"
+        }
+        
+        if context:
+            system_prompt = f"""You are a helpful plant expert for Egypt and Middle East.
+
+Current plant: {context.get('plant_name', 'Unknown')}
+Scientific: {context.get('scientific_name', 'N/A')}
+Family: {context.get('family', 'N/A')}
+
+Provide practical advice for Egyptian climate. Be concise and friendly."""
+        else:
+            system_prompt = "You are a plant expert specializing in Egyptian and Middle Eastern plants. Be helpful and concise."
+        
+        payload = {
+            "model": "llama-3.1-70b-versatile",  # FREE model!
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
             ],
             "max_tokens": 1000,
             "temperature": 0.7
@@ -353,22 +455,13 @@ Provide accurate, practical advice about plant identification, care, diseases, a
         
         if response.status_code == 200:
             result = response.json()
-            
-            if "choices" in result and len(result["choices"]) > 0:
+            if "choices" in result:
                 return result["choices"][0]["message"]["content"]
-            else:
-                return "Sorry, I couldn't generate a response. Please try again."
-        else:
-            error_msg = f"Error: {response.status_code}"
-            try:
-                error_data = response.json()
-                error_msg += f" - {error_data.get('error', {}).get('message', 'Unknown error')}"
-            except:
-                pass
-            return error_msg
-            
+        
+        return f"Error: {response.status_code}"
     except Exception as e:
         return f"Error: {str(e)}"
+
 
 # ----------------------------------
 # Sidebar
@@ -383,45 +476,43 @@ app_mode = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Quick Stats")
 st.sidebar.metric("Plants Identified", len(st.session_state.detection_history))
-st.sidebar.metric("AI Model", "GPT-4o-mini")
+st.sidebar.metric("Status", "100% FREE! 🎉")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 💡 Tips")
-st.sidebar.info("""
-- Use clear, well-lit photos
-- Focus on leaves or flowers
-- Avoid blurry images
-- Multiple angles help
-- Works great in Egypt! 🇪🇬
-""")
+st.sidebar.markdown("### 💡 Active APIs")
+if GROQ_API_KEY:
+    st.sidebar.success("✅ Groq (FREE)")
+if TOGETHER_API_KEY:
+    st.sidebar.success("✅ Together AI")
+if not GROQ_API_KEY and not TOGETHER_API_KEY:
+    st.sidebar.error("❌ No API keys")
 
 # ----------------------------------
 # Home Page
 # ----------------------------------
 if app_mode == "🏠 Home":
     st.markdown("<h1>🌿 Plant Doctor AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>Powered by GPT-4 Vision - Works Perfectly in Egypt 🇪🇬</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>100% FREE AI Plant Identification - Works in Egypt! 🇪🇬</p>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Hero Image
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image("https://images.unsplash.com/photo-1466781783364-36c955e42a7f?w=800", 
-                 caption="Identify plants instantly with AI")
+                 caption="Identify plants instantly with FREE AI")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
     # Features
-    st.markdown("### ✨ Key Features")
+    st.markdown("### ✨ 100% FREE Features")
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
         <div class="feature-card">
-            <div style="font-size: 48px;">🔍</div>
-            <h3>Advanced Plant ID</h3>
-            <p>Powered by GPT-4 Vision for accurate plant identification</p>
+            <div style="font-size: 48px;">🚀</div>
+            <h3>Groq Llama Vision</h3>
+            <p>Super fast, completely FREE, works in Egypt!</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -429,83 +520,60 @@ if app_mode == "🏠 Home":
         st.markdown("""
         <div class="feature-card">
             <div style="font-size: 48px;">💬</div>
-            <h3>Expert AI Chat</h3>
-            <p>Get personalized plant care advice from GPT-4</p>
+            <h3>FREE AI Chat</h3>
+            <p>Unlimited questions about plant care</p>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Stats
-    st.markdown("### 📊 Powered by OpenAI GPT-4")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div class="stat-box">
-            <div class="stat-number">🤖</div>
-            <div>GPT-4 Vision</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div class="stat-box">
-            <div class="stat-number">95%+</div>
-            <div>Accuracy</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div class="stat-box">
-            <div class="stat-number">🇪🇬</div>
-            <div>Works in Egypt</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
     # Getting Started
-    st.markdown("### 🚀 Getting Started")
+    st.markdown("### 🚀 Get Started (100% FREE!)")
+    
     st.info("""
-    1. **Get your FREE OpenAI API key**: https://platform.openai.com/api-keys
-    2. Create `.streamlit/secrets.toml` file with:
-       ```
-       OPENAI_API_KEY = "sk-proj-your-key-here"
-       ```
-    3. Upload a plant photo
-    4. Get instant AI-powered identification
-    5. Chat for personalized care advice
+    **Choose ONE or BOTH FREE options:**
+    
+    ### Option 1: Groq (RECOMMENDED ⭐)
+    - **Completely FREE forever**
+    - **Fastest AI in the world** ⚡
+    - **Works perfectly in Egypt** 🇪🇬
+    - **No credit card needed**
+    
+    1. Visit: https://console.groq.com/keys
+    2. Sign up FREE
+    3. Create API key
+    4. Add to `.streamlit/secrets.toml`:
+    ```toml
+    GROQ_API_KEY = "gsk_..."
+    ```
+    
+    ### Option 2: Together AI (Backup)
+    - **FREE $25 credits** for new users
+    - Good vision models
+    
+    1. Visit: https://api.together.xyz/settings/api-keys
+    2. Sign up
+    3. Get FREE $25 credits
+    4. Add to `.streamlit/secrets.toml`:
+    ```toml
+    TOGETHER_API_KEY = "your_key_here"
+    ```
+    
+    **The app will try all available APIs automatically!**
     """)
     
-    # API Setup
-    if not OPENAI_API_KEY:
-        st.warning("""
-        ⚠️ **API Key Setup Required**
+    # API Status
+    if not GROQ_API_KEY and not TOGETHER_API_KEY:
+        st.error("""
+        ⚠️ **No API Keys Configured**
         
-        This app uses **OpenAI GPT-4o-mini** for plant identification - it's powerful and FREE!
+        Please add at least one API key to get started.
         
-        **Get your FREE API key:**
-        1. Visit: https://platform.openai.com/api-keys
-        2. Sign up (new accounts get $5 FREE credits!)
-        3. Create an API key
-        4. Add to `.streamlit/secrets.toml`:
-        
-        ```toml
-        OPENAI_API_KEY = "sk-proj-..."
-        ```
-        
-        **Why OpenAI GPT-4?**
-        ✅ Excellent vision capabilities
-        ✅ Accurate plant identification
-        ✅ **Works in Egypt!** 🇪🇬 (No restrictions)
-        ✅ FREE $5 credits for new users
-        ✅ Very affordable after ($0.15 per 1000 images)
-        ✅ Knows Egyptian plants and climate
+        **Groq is RECOMMENDED** - it's completely free and fastest! 🚀
         """)
     else:
-        st.success("✅ OpenAI API configured! You're ready to identify plants.")
+        api_count = sum([bool(GROQ_API_KEY), bool(TOGETHER_API_KEY)])
+        st.success(f"✅ {api_count} FREE API(s) configured! Ready to identify plants.")
 
 # ----------------------------------
 # Plant Detection Page
@@ -513,9 +581,15 @@ if app_mode == "🏠 Home":
 elif app_mode == "🔍 Plant Detection":
     st.markdown("<h1>🔍 Plant Identification</h1>", unsafe_allow_html=True)
     
-    if not OPENAI_API_KEY:
-        st.error("⚠️ OpenAI API key required. Please add OPENAI_API_KEY to .streamlit/secrets.toml")
-        st.info("Get your FREE key at: https://platform.openai.com/api-keys (New users get $5 free!)")
+    if not GROQ_API_KEY and not TOGETHER_API_KEY:
+        st.error("⚠️ At least one FREE API key required.")
+        st.info("""
+        **Get Groq FREE API (RECOMMENDED):**
+        https://console.groq.com/keys
+        
+        **Or Together AI ($25 FREE credits):**
+        https://api.together.xyz/settings/api-keys
+        """)
         st.stop()
     
     col1, col2 = st.columns([1, 1])
@@ -528,91 +602,87 @@ elif app_mode == "🔍 Plant Detection":
             image = Image.open(uploaded_file)
             st.image(image, caption="Uploaded Image", use_column_width=True)
             
-            identify_btn = st.button("🔍 Identify Plant with GPT-4 Vision", use_container_width=True)
+            identify_btn = st.button("🔍 Identify Plant (100% FREE)", use_container_width=True)
     
     with col2:
         st.markdown("### 📋 Identification Results")
         
         if uploaded_file and identify_btn:
-            with st.spinner("🤖 GPT-4 Vision is analyzing your plant..."):
-                result = detect_plant_with_gpt4_vision(image)
+            result = smart_plant_detection(image)
+            
+            if not result.get("error"):
+                data = result.get("data", {})
                 
-                if not result.get("error"):
-                    data = result.get("data", {})
-                    
-                    # Display comprehensive results
-                    plant_name = data.get("plant_name", "Unknown Plant")
-                    scientific_name = data.get("scientific_name", "N/A")
-                    family = data.get("family", "N/A")
-                    confidence = data.get("confidence", 0)
-                    description = data.get("description", "No description available")
-                    
+                plant_name = data.get("plant_name", "Unknown Plant")
+                scientific_name = data.get("scientific_name", "N/A")
+                family = data.get("family", "N/A")
+                confidence = data.get("confidence", 0)
+                description = data.get("description", "No description available")
+                
+                st.markdown(f"""
+                <div class="result-card">
+                    <h2>🌿 {plant_name}</h2>
+                    <p><strong>Scientific Name:</strong> {scientific_name}</p>
+                    <p><strong>Family:</strong> {family}</p>
+                    <p><strong>Confidence:</strong> {confidence}%</p>
+                    <p><strong>Source:</strong> {result.get('source', 'AI Model')}</p>
+                    <hr>
+                    <p><strong>Description:</strong><br>{description}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Care Tips
+                if "care_tips" in data and data["care_tips"]:
+                    st.markdown("### 💧 Care Tips")
+                    for tip in data["care_tips"]:
+                        st.write(f"• {tip}")
+                
+                # Additional Info
+                col_a, col_b = st.columns(2)
+                
+                with col_a:
+                    if "is_edible" in data:
+                        edible_status = "✅ Edible" if data["is_edible"] else "⚠️ Not Edible"
+                        st.info(edible_status)
+                
+                with col_b:
+                    if "native_region" in data:
+                        st.info(f"🌍 {data['native_region']}")
+                
+                # Interesting Facts
+                if "interesting_facts" in data:
                     st.markdown(f"""
                     <div class="result-card">
-                        <h2>🌿 {plant_name}</h2>
-                        <p><strong>Scientific Name:</strong> {scientific_name}</p>
-                        <p><strong>Family:</strong> {family}</p>
-                        <p><strong>Confidence:</strong> {confidence}%</p>
-                        <hr>
-                        <p><strong>Description:</strong><br>{description}</p>
+                        <h3>✨ Did You Know?</h3>
+                        <p>{data['interesting_facts']}</p>
                     </div>
                     """, unsafe_allow_html=True)
-                    
-                    # Care Tips
-                    if "care_tips" in data and data["care_tips"]:
-                        st.markdown("### 💧 Care Tips")
-                        for tip in data["care_tips"]:
-                            st.write(f"• {tip}")
-                    
-                    # Additional Info
-                    col_a, col_b = st.columns(2)
-                    
-                    with col_a:
-                        if "is_edible" in data:
-                            edible_status = "✅ Edible" if data["is_edible"] else "⚠️ Not Edible"
-                            st.info(edible_status)
-                    
-                    with col_b:
-                        if "native_region" in data:
-                            st.info(f"🌍 Native to: {data['native_region']}")
-                    
-                    # Interesting Facts
-                    if "interesting_facts" in data:
-                        st.markdown(f"""
-                        <div class="result-card">
-                            <h3>✨ Did You Know?</h3>
-                            <p>{data['interesting_facts']}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    # Common Issues
-                    if "common_issues" in data and data["common_issues"]:
-                        with st.expander("⚠️ Common Issues & Solutions"):
-                            for issue in data["common_issues"]:
-                                st.write(f"• {issue}")
-                    
-                    # Save to context
-                    st.session_state.plant_context = {
-                        'plant_name': plant_name,
-                        'scientific_name': scientific_name,
-                        'family': family,
-                        'confidence': confidence,
-                        'description': description
-                    }
-                    
-                    # Save to history
-                    st.session_state.detection_history.append({
-                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        'plant_name': plant_name,
-                        'scientific_name': scientific_name,
-                        'type': 'identification'
-                    })
-                    
-                    st.success("✅ Plant identified! Go to AI Chat for more personalized advice.")
-                    
-                else:
-                    st.error(f"❌ {result.get('message')}")
-                    st.info("Please try again with a clearer image or check your API key.")
+                
+                # Common Issues
+                if "common_issues" in data and data["common_issues"]:
+                    with st.expander("⚠️ Common Issues"):
+                        for issue in data["common_issues"]:
+                            st.write(f"• {issue}")
+                
+                # Save to context
+                st.session_state.plant_context = {
+                    'plant_name': plant_name,
+                    'scientific_name': scientific_name,
+                    'family': family,
+                    'confidence': confidence
+                }
+                
+                # Save to history
+                st.session_state.detection_history.append({
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    'plant_name': plant_name,
+                    'scientific_name': scientific_name,
+                    'type': 'identification'
+                })
+                
+                st.success("✅ Plant identified! Go to AI Chat for more advice.")
+            else:
+                st.error(f"❌ {result.get('message')}")
         
         elif not uploaded_file:
             st.info("👆 Upload an image to get started")
@@ -621,104 +691,84 @@ elif app_mode == "🔍 Plant Detection":
 # AI Chat Page
 # ----------------------------------
 elif app_mode == "💬 AI Chat":
-    st.markdown("<h1>💬 Chat with GPT-4 Plant Expert</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>💬 FREE AI Plant Expert</h1>", unsafe_allow_html=True)
     
-    if not OPENAI_API_KEY:
-        st.error("⚠️ OpenAI API key not configured.")
-        st.info("Get your free API key at: https://platform.openai.com/api-keys")
+    if not GROQ_API_KEY:
+        st.error("⚠️ Groq API key needed for chat.")
+        st.info("Get FREE key: https://console.groq.com/keys")
         st.stop()
     
     # Display context
     if st.session_state.plant_context:
-        with st.expander("📌 Current Plant Context", expanded=True):
+        with st.expander("📌 Current Plant", expanded=True):
             context = st.session_state.plant_context
             col1, col2 = st.columns(2)
             with col1:
                 st.write(f"**Plant:** {context.get('plant_name', 'Unknown')}")
-                st.write(f"**Scientific Name:** {context.get('scientific_name', 'N/A')}")
+                st.write(f"**Scientific:** {context.get('scientific_name', 'N/A')}")
             with col2:
                 st.write(f"**Family:** {context.get('family', 'N/A')}")
                 st.write(f"**Confidence:** {context.get('confidence', 0)}%")
-    else:
-        st.info("💡 Identify a plant first for context-aware advice, or ask general questions!")
     
     st.markdown("---")
     
     # Chat History
-    chat_container = st.container()
-    with chat_container:
-        for message in st.session_state.chat_history:
-            if message['role'] == 'user':
-                st.markdown(f"""
-                <div class="chat-message user-message">
-                    <strong>You:</strong> {message['content']}
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class="chat-message bot-message">
-                    <strong>🤖 GPT-4:</strong> {message['content']}
-                </div>
-                """, unsafe_allow_html=True)
+    for message in st.session_state.chat_history:
+        if message['role'] == 'user':
+            st.markdown(f"""
+            <div class="chat-message user-message">
+                <strong>You:</strong> {message['content']}
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="chat-message bot-message">
+                <strong>🤖 AI:</strong> {message['content']}
+            </div>
+            """, unsafe_allow_html=True)
     
     # Chat Input
     st.markdown("---")
     col1, col2 = st.columns([5, 1])
     
     with col1:
-        user_input = st.text_input("Ask me anything about plants...", key="chat_input", placeholder="e.g., How do I treat fungal diseases in Egyptian climate?")
+        user_input = st.text_input("Ask anything...", key="chat_input", placeholder="How to grow tomatoes in Egypt?")
     
     with col2:
         send_btn = st.button("Send 📨", use_container_width=True)
     
     if send_btn and user_input:
-        # Add user message
-        st.session_state.chat_history.append({
-            'role': 'user',
-            'content': user_input
-        })
+        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
         
-        # Get AI response
-        with st.spinner("🤔 GPT-4 is thinking..."):
-            response = chat_with_gpt4(user_input, st.session_state.plant_context)
+        with st.spinner("🤔 AI thinking..."):
+            response = chat_with_groq(user_input, st.session_state.plant_context)
         
-        # Add bot response
-        st.session_state.chat_history.append({
-            'role': 'assistant',
-            'content': response
-        })
-        
+        st.session_state.chat_history.append({'role': 'assistant', 'content': response})
         st.rerun()
     
     # Quick Questions
     if len(st.session_state.chat_history) == 0:
         st.markdown("### 💡 Quick Questions")
-        quick_questions = [
-            "What plants grow well in Egyptian summer?",
-            "How to deal with aphids in hot climate?",
-            "Best vegetables for Nile Delta region?",
-            "Indoor plants for Egyptian apartments?"
+        questions = [
+            "Best plants for Egyptian summer?",
+            "How to deal with aphids?",
+            "Indoor plants for apartments?",
+            "When to fertilize roses?"
         ]
         
         cols = st.columns(2)
-        for i, question in enumerate(quick_questions):
+        for i, q in enumerate(questions):
             with cols[i % 2]:
-                if st.button(question, key=f"quick_{i}"):
-                    st.session_state.chat_history.append({
-                        'role': 'user',
-                        'content': question
-                    })
-                    with st.spinner("🤔 GPT-4 is thinking..."):
-                        response = chat_with_gpt4(question, st.session_state.plant_context)
-                    st.session_state.chat_history.append({
-                        'role': 'assistant',
-                        'content': response
-                    })
+                if st.button(q, key=f"q_{i}"):
+                    st.session_state.chat_history.append({'role': 'user', 'content': q})
+                    with st.spinner("🤔 Thinking..."):
+                        response = chat_with_groq(q, st.session_state.plant_context)
+                    st.session_state.chat_history.append({'role': 'assistant', 'content': response})
                     st.rerun()
     
     # Clear Chat
     if len(st.session_state.chat_history) > 0:
-        if st.button("🗑️ Clear Chat History"):
+        if st.button("🗑️ Clear Chat"):
             st.session_state.chat_history = []
             st.rerun()
 
@@ -729,19 +779,18 @@ elif app_mode == "📚 My Plants":
     st.markdown("<h1>📚 My Plant Collection</h1>", unsafe_allow_html=True)
     
     if not st.session_state.detection_history:
-        st.info("🌱 You haven't identified any plants yet. Go to Plant Detection to get started!")
+        st.info("🌱 No plants identified yet. Go to Plant Detection!")
     else:
-        st.markdown(f"### Total Identifications: {len(st.session_state.detection_history)}")
+        st.markdown(f"### Total: {len(st.session_state.detection_history)}")
         
-        for i, record in enumerate(reversed(st.session_state.detection_history)):
+        for record in reversed(st.session_state.detection_history):
             with st.expander(f"🌿 {record['plant_name']} - {record['timestamp']}"):
                 col1, col2 = st.columns(2)
                 with col1:
                     st.write(f"**Plant:** {record['plant_name']}")
-                    st.write(f"**Scientific Name:** {record.get('scientific_name', 'N/A')}")
+                    st.write(f"**Scientific:** {record.get('scientific_name', 'N/A')}")
                 with col2:
                     st.write(f"**Date:** {record['timestamp']}")
-                    st.write(f"**Type:** {record['type'].title()}")
         
         if st.button("🗑️ Clear History"):
             st.session_state.detection_history = []
