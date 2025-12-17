@@ -659,7 +659,6 @@ app_mode = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Quick Stats")
 st.sidebar.metric("Plants Identified", len(st.session_state.detection_history))
-st.sidebar.metric("Status", "100% FREE! 🎉")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💡 Active APIs")
@@ -677,14 +676,14 @@ if not MISTRAL_API_KEY and not GROQ_API_KEY and not TOGETHER_API_KEY:
 # ----------------------------------
 if app_mode == "🏠 Home":
     st.markdown("<h1>🌿 Plant Doctor AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>100% FREE AI Plant Identification - Works in Egypt! 🇪🇬</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 20px; color: #666;'>AI Plant Identification </p>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image("https://images.unsplash.com/photo-1466781783364-36c955e42a7f?w=800", 
-                 caption="Identify plants instantly with FREE AI")
+                 caption="Identify plants instantly with AI")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -697,7 +696,7 @@ if app_mode == "🏠 Home":
         <div class="feature-card">
             <div style="font-size: 48px;">🎯</div>
             <h3>Mistral Pixtral Vision</h3>
-            <p>Excellent vision AI, completely FREE!</p>
+            <p>Excellent vision AI</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -705,7 +704,7 @@ if app_mode == "🏠 Home":
         st.markdown("""
         <div class="feature-card">
             <div style="font-size: 48px;">💬</div>
-            <h3>FREE AI Chat</h3>
+            <h3>AI Chat</h3>
             <p>Unlimited questions about plant care</p>
         </div>
         """, unsafe_allow_html=True)
@@ -954,4 +953,5 @@ elif app_mode == "📚 My Plants":
         if st.button("🗑️ Clear History"):
             st.session_state.detection_history = []
             st.rerun()
+
 
