@@ -755,7 +755,7 @@ elif app_mode == "🔍 Plant Detection":
             image = Image.open(uploaded_file)
             st.image(image, caption="Uploaded Image", use_column_width=True)
             
-            identify_btn = st.button("🔍 Identify Plant (100% FREE)", use_container_width=True)
+            identify_btn = st.button("🔍 Identify Plant", use_container_width=True)
     
     with col2:
         st.markdown("### 📋 Identification Results")
@@ -953,5 +953,6 @@ elif app_mode == "📚 My Plants":
         if st.button("🗑️ Clear History"):
             st.session_state.detection_history = []
             st.rerun()
+
 
 
